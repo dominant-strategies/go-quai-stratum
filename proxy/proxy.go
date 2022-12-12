@@ -77,10 +77,6 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		proxy.sessions = make(map[*Session]struct{})
 		go proxy.ListenTCP()
 	}
-	
-	if cfg.Proxy.StratumNiceHash.Enabled {
-		go proxy.ListenNiceHashTCP()
-	}
 
 	proxy.fetchBlockTemplate()
 
