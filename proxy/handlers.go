@@ -87,10 +87,8 @@ func (s *ProxyServer) handleSubmitRPC(cs *Session, login, id string, params []st
 	}
 	t := s.currentBlockTemplate()
 
-	/// ORIGINAL
-	/// exist, validShare := s.processShare(login, id, cs.ip, t, params)
-	/// NICEHASH
-	exist, validShare := s.processShareNH(login, id, cs.ip, t, params)
+	
+	exist, validShare := s.processShare(login, id, cs.ip, t, params)	
 	
 	ok := s.policy.ApplySharePolicy(cs.ip, !exist && validShare)
 
