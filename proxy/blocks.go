@@ -94,10 +94,6 @@ func (s *ProxyServer) fetchBlockTemplate() {
 	if s.config.Proxy.Stratum.Enabled {
 		go s.broadcastNewJobs()
 	}
-	
-	if s.config.Proxy.StratumNiceHash.Enabled{
-		go s.broadcastNewJobsNH()
-	}
 }
 
 func (s *ProxyServer) fetchPendingBlock() (*rpc.GetBlockReplyPart, uint64, int64, error) {
