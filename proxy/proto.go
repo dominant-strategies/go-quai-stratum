@@ -10,7 +10,7 @@ type JSONRpcReq struct {
 
 type JSONRpcReqNH struct  {
 	Id     interface{} `json:"id"`
-	Method string      `json:"method"`
+	Method string           `json:"method"`
 	Params interface{} `json:"params"`
 }
 
