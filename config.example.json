@@ -15,7 +15,7 @@
 		"behindReverseProxy": false,
 		"blockRefreshInterval": "120ms",
 		"stateUpdateInterval": "3s",
-		"difficulty": 4000000000,
+		"difficulty": "4000000000",
 		"DifficultyNiceHash": 4,
 		"hashrateExpiration": "3h",
 
@@ -28,14 +28,7 @@
 			"timeout": "120s",
 			"maxConn": 8192
 		},
-		
-                "stratum_nice_hash": {
-                        "enabled": true,
-                        "listen": "0.0.0.0:40004",
-                        "timeout": "120s",
-                        "maxConn": 8192
-                },
-		
+				
 		"policy": {
 			"workers": 8,
 			"resetInterval": "60m",
@@ -62,7 +55,7 @@
 		"enabled": true,
 		"purgeOnly": false,
 		"purgeInterval": "10m",
-		"listen": "0.0.0.0:8080",
+		"listen": "0.0.0.0:30300",
 		"statsCollectInterval": "5s",
 		"hashrateWindow": "30m",
 		"hashrateLargeWindow": "3h",
@@ -78,13 +71,18 @@
 	"upstreamCheckInterval": "5s",
 	"upstream": [
 		{
-			"name": "main",
-			"url": "http://127.0.0.1:8545",
+			"name": "prime",
+			"url": "http://127.0.0.1:8546",
 			"timeout": "10s"
 		},
 		{
-			"name": "backup",
-			"url": "http://127.0.0.2:8545",
+			"name": "region",
+			"url": "http://127.0.0.1:8578",
+			"timeout": "10s"
+		},
+		{
+			"name": "zone",
+			"url": "http://127.0.0.1:8610",
 			"timeout": "10s"
 		}
 	],
@@ -94,36 +92,5 @@
 		"poolSize": 10,
 		"database": 0,
 		"password": ""
-	},
-
-	"unlocker": {
-		"enabled": false,
-		"poolFee": 1.0,
-		"poolFeeAddress": "",
-		"depth": 120,
-		"immatureDepth": 20,
-		"keepTxFees": false,
-		"interval": "10m",
-		"daemon": "http://127.0.0.1:8545",
-		"timeout": "10s"
-	},
-
-	"payouts": {
-		"enabled": false,
-		"requirePeers": 25,
-		"interval": "120m",
-		"daemon": "http://127.0.0.1:8545",
-		"timeout": "10s",
-		"address": "0x0",
-		"gas": "21000",
-		"gasPrice": "50000000000",
-		"autoGas": true,
-		"threshold": 500000000,
-		"bgsave": false
-	},
-
-	"newrelicEnabled": false,
-	"newrelicName": "MyEtherProxy",
-	"newrelicKey": "SECRET_KEY",
-	"newrelicVerbose": false
+	}
 }

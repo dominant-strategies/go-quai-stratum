@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/J-A-M-P-S/go-etcstratum/storage"
-	"github.com/J-A-M-P-S/go-etcstratum/util"
+	"github.com/dominant-strategies/go-quai-stratum/storage"
+	"github.com/dominant-strategies/go-quai-stratum/util"
 )
 
 type Config struct {

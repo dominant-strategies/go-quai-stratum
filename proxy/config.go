@@ -20,9 +20,6 @@ type Config struct {
 	Coin    string         `json:"coin"`
 	Redis   storage.Config `json:"redis"`
 
-	BlockUnlocker payouts.UnlockerConfig `json:"unlocker"`
-	Payouts       payouts.PayoutsConfig  `json:"payouts"`
-	
 	AvgBlockTime    float64 `json:"avgBlockTime"`
 	BlockTimeWindow int64   `json:"blockTimeWindow"`
 

@@ -25,7 +25,7 @@ First install  [core-geth](https://github.com/etclabscore/core-geth/releases).
 Clone & compile:
 
     git config --global http.https://gopkg.in.followRedirects true
-    git clone https://github.com/J-A-M-P-S/go-etcstratum.git
+    git clone https://github.com/dominant-strategies/go-quai-stratum.git
     cd go-etcstratum
     make all
 
@@ -197,53 +197,6 @@ otherwise you will get errors on start because of JSON comments.**
     "database": 0,
     "password": ""
   },
-
-  // This module periodically remits etc to miners
-  "unlocker": {
-    "enabled": false,
-    // Pool fee percentage
-    "poolFee": 1.0,
-    // Pool fees beneficiary address (leave it blank to disable fee withdrawals)
-    "poolFeeAddress": "",
-    // Donate 10% from pool fees to developers
-    "donate": true,
-    // Unlock only if this number of blocks mined back
-    "depth": 120,
-    // Simply don't touch this option
-    "immatureDepth": 20,
-    // Keep mined transaction fees as pool fees
-    "keepTxFees": false,
-    // Run unlocker in this interval
-    "interval": "10m",
-    // Geth instance node rpc endpoint for unlocking blocks
-    "daemon": "http://127.0.0.1:8545",
-    // Rise error if can't reach geth in this amount of time
-    "timeout": "10s"
-  },
-
-  // Pay out miners using this module
-  "payouts": {
-    "enabled": false,
-    // Require minimum number of peers on node
-    "requirePeers": 25,
-    // Run payouts in this interval
-    "interval": "12h",
-    // Geth instance node rpc endpoint for payouts processing
-    "daemon": "http://127.0.0.1:8545",
-    // Rise error if can't reach geth in this amount of time
-    "timeout": "10s",
-    // Address with pool balance
-    "address": "0x0",
-    // Let geth to determine gas and gasPrice
-    "autoGas": true,
-    // Gas amount and price for payout tx (advanced users only)
-    "gas": "21000",
-    "gasPrice": "50000000000",
-    // Send payment only if miner's balance is >= 0.5 Ether
-    "threshold": 500000000,
-    // Perform BGSAVE on Redis after successful payouts session
-    "bgsave": false
-  }
 }
 ```
 
@@ -253,22 +206,6 @@ create several configs and disable unneeded modules on each server. (Advanced us
 I recommend this deployment strategy:
 
 * Mining instance - 1x (it depends, you can run one node for EU, one for US, one for Asia)
-* Unlocker and payouts instance - 1x each (strict!)
 * API instance - 1x
 
-### Notes
-
-* Unlocking and payouts are sequential, 1st tx go, 2nd waiting for 1st to confirm and so on. You can disable that in code. Carefully read `docs/PAYOUTS.md`.
-* Also, keep in mind that **unlocking and payouts will halt in case of backend or node RPC errors**. In that case check everything and restart.
-* You must restart module if you see errors with the word *suspended*.
-* Don't run payouts and unlocker modules as part of mining node. Create separate configs for both, launch independently and make sure you have a single instance of each module running.
-* If `poolFeeAddress` is not specified all pool profit will remain on coinbase address. If it specified, make sure to periodically send some dust back required for payments.
-
-### Mordor
-
-To use this stratum on the mordor testnet two settings require changing to "mordor"
-
-network in your config.json (this sets backend (validation,unlocker) to mordor paramaters)
-APP.Network in your www/config/environment.js (this sets the frontend to mordor paramaters)
-rerun ./build.sh
 

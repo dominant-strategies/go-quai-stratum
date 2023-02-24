@@ -9,13 +9,11 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/yvasiyarov/gorelic"
 	"github.com/J-A-M-P-S/structs"
 
-	"github.com/J-A-M-P-S/go-etcstratum/api"
-	"github.com/J-A-M-P-S/go-etcstratum/payouts"
-	"github.com/J-A-M-P-S/go-etcstratum/proxy"
-	"github.com/J-A-M-P-S/go-etcstratum/storage"
+	"github.com/dominant-strategies/go-quai-stratum/api"
+	"github.com/dominant-strategies/go-quai-stratum/proxy"
+	"github.com/dominant-strategies/go-quai-stratum/storage"
 )
 
 var cfg proxy.Config
@@ -30,26 +28,6 @@ func startApi() {
 	settings := structs.Map(&cfg)
 	s := api.NewApiServer(&cfg.Api, settings, backend)
 	s.Start()
-}
-
-func startBlockUnlocker() {
-	u := payouts.NewBlockUnlocker(&cfg.BlockUnlocker, backend, &cfg.Network)
-	u.Start()
-}
-
-func startPayoutsProcessor() {
-	u := payouts.NewPayoutsProcessor(&cfg.Payouts, backend)
-	u.Start()
-}
-
-func startNewrelic() {
-	if cfg.NewrelicEnabled {
-		nr := gorelic.NewAgent()
-		nr.Verbose = cfg.NewrelicVerbose
-		nr.NewrelicLicense = cfg.NewrelicKey
-		nr.NewrelicName = cfg.NewrelicName
-		nr.Run()
-	}
 }
 
 func readConfig(cfg *proxy.Config) {
@@ -71,6 +49,10 @@ func readConfig(cfg *proxy.Config) {
 	}
 }
 
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 func main() {
 	readConfig(&cfg)
 	rand.Seed(time.Now().UnixNano())
@@ -79,8 +61,6 @@ func main() {
 		runtime.GOMAXPROCS(cfg.Threads)
 		log.Printf("Running with %v threads", cfg.Threads)
 	}
-
-	startNewrelic()
 
 	backend = storage.NewRedisClient(&cfg.Redis, cfg.Coin)
 	pong, err := backend.Check()
@@ -95,12 +75,6 @@ func main() {
 	}
 	if cfg.Api.Enabled {
 		go startApi()
-	}
-	if cfg.BlockUnlocker.Enabled {
-		go startBlockUnlocker()
-	}
-	if cfg.Payouts.Enabled {
-		go startPayoutsProcessor()
 	}
 	quit := make(chan bool)
 	<-quit

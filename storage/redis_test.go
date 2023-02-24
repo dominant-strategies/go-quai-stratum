@@ -87,42 +87,6 @@ func TestGetBalance(t *testing.T) {
 	}
 }
 
-func TestLockPayouts(t *testing.T) {
-	reset()
-
-	r.LockPayouts("x", 1000)
-	v := r.client.Get("test:payments:lock").Val()
-	if v != "x:1000" {
-		t.Errorf("Invalid lock amount: %v", v)
-	}
-
-	err := r.LockPayouts("x", 100)
-	if err == nil {
-		t.Errorf("Must not overwrite lock")
-	}
-}
-
-func TestUnlockPayouts(t *testing.T) {
-	reset()
-
-	r.client.Set(r.formatKey("payments:lock"), "x:1000", 0)
-
-	r.UnlockPayouts()
-	err := r.client.Get(r.formatKey("payments:lock")).Err()
-	if err != redis.Nil {
-		t.Errorf("Must release lock")
-	}
-}
-
-func TestIsPayoutsLocked(t *testing.T) {
-	reset()
-
-	r.LockPayouts("x", 1000)
-	if locked, _ := r.IsPayoutsLocked(); !locked {
-		t.Errorf("Payouts must be locked")
-	}
-}
-
 func TestUpdateBalance(t *testing.T) {
 	reset()
 
@@ -293,13 +257,13 @@ func TestCollectLuckStats(t *testing.T) {
 	reset()
 
 	members := []redis.Z{
-		redis.Z{Score: 0, Member: "1:0:0x0:0x0:0:100:100:0"},
+		{Score: 0, Member: "1:0:0x0:0x0:0:100:100:0"},
 	}
 	r.client.ZAdd(r.formatKey("blocks:immature"), members...)
 	members = []redis.Z{
-		redis.Z{Score: 1, Member: "1:0:0x2:0x0:0:50:100:0"},
-		redis.Z{Score: 2, Member: "0:1:0x1:0x0:0:100:100:0"},
-		redis.Z{Score: 3, Member: "0:0:0x3:0x0:0:200:100:0"},
+		{Score: 1, Member: "1:0:0x2:0x0:0:50:100:0"},
+		{Score: 2, Member: "0:1:0x1:0x0:0:100:100:0"},
+		{Score: 3, Member: "0:0:0x3:0x0:0:200:100:0"},
 	}
 	r.client.ZAdd(r.formatKey("blocks:matured"), members...)
 

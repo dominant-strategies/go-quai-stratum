@@ -11,7 +11,7 @@ import (
 
 	"gopkg.in/redis.v3"
 
-	"github.com/J-A-M-P-S/go-etcstratum/util"
+	"github.com/dominant-strategies/go-quai-stratum/util"
 )
 
 type Config struct {
@@ -66,7 +66,6 @@ type BlockData struct {
 	Hash           string   `json:"hash"`
 	Nonce          string   `json:"-"`
 	PowHash        string   `json:"-"`
-	MixDigest      string   `json:"-"`
 	Reward         *big.Int `json:"-"`
 	ExtraReward    *big.Int `json:"-"`
 	ImmatureReward string   `json:"-"`
@@ -204,7 +203,7 @@ func convertPoolChartsResults(raw *redis.ZSliceCmd) []*PoolCharts {
 	}
 	var reverse []*PoolCharts
 	for i := len(result) - 1; i >= 0; i-- {
-		reverse = append(reverse, result[i]);
+		reverse = append(reverse, result[i])
 	}
 	return reverse
 }
@@ -224,7 +223,7 @@ func convertMinerChartsResults(raw *redis.ZSliceCmd) []*MinerCharts {
 	}
 	var reverse []*MinerCharts
 	for i := len(result) - 1; i >= 0; i-- {
-		reverse = append(reverse, result[i]);
+		reverse = append(reverse, result[i])
 	}
 	return reverse
 }
@@ -329,9 +328,9 @@ func (r *RedisClient) GetNodeStates() ([]map[string]interface{}, error) {
 
 func (r *RedisClient) checkPoWExist(height uint64, params []string) (bool, error) {
 	r.client.ZRemRangeByScore(r.formatKey("pow"), "-inf", fmt.Sprint("(", height-8))
-	
+
 	fmt.Println(strings.Join(params, ":"))
-	
+
 	val, err := r.client.ZAdd(r.formatKey("pow"), redis.Z{Score: float64(height), Member: strings.Join(params, ":")}).Result()
 	return val == 0, err
 }
@@ -499,7 +498,7 @@ func (r *RedisClient) GetPayees() ([]string, error) {
 			break
 		}
 	}
-	for login, _ := range payees {
+	for login := range payees {
 		result = append(result, login)
 	}
 	return result, nil
@@ -513,32 +512,6 @@ func (r *RedisClient) GetBalance(login string) (int64, error) {
 		return 0, cmd.Err()
 	}
 	return cmd.Int64()
-}
-
-func (r *RedisClient) LockPayouts(login string, amount int64) error {
-	key := r.formatKey("payments", "lock")
-	result := r.client.SetNX(key, join(login, amount), 0).Val()
-	if !result {
-		return fmt.Errorf("Unable to acquire lock '%s'", key)
-	}
-	return nil
-}
-
-func (r *RedisClient) UnlockPayouts() error {
-	key := r.formatKey("payments", "lock")
-	_, err := r.client.Del(key).Result()
-	return err
-}
-
-func (r *RedisClient) IsPayoutsLocked() (bool, error) {
-	_, err := r.client.Get(r.formatKey("payments", "lock")).Result()
-	if err == redis.Nil {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	} else {
-		return true, nil
-	}
 }
 
 type PendingPayment struct {
@@ -1042,7 +1015,6 @@ func convertCandidateResults(raw *redis.ZSliceCmd) []*BlockData {
 		fields := strings.Split(v.Member.(string), ":")
 		block.Nonce = fields[0]
 		block.PowHash = fields[1]
-		block.MixDigest = fields[2]
 		block.Timestamp, _ = strconv.ParseInt(fields[3], 10, 64)
 		block.Difficulty, _ = strconv.ParseInt(fields[4], 10, 64)
 		block.TotalShares, _ = strconv.ParseInt(fields[5], 10, 64)
@@ -1243,7 +1215,7 @@ func convertPaymentChartsResults(raw *redis.ZSliceCmd) []*PaymentCharts {
 	}
 	var reverse []*PaymentCharts
 	for i := len(result) - 1; i >= 0; i-- {
-		reverse = append(reverse, result[i]);
+		reverse = append(reverse, result[i])
 	}
 	return reverse
 }

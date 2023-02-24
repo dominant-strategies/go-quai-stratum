@@ -21,4 +21,3 @@ clean:
 
 quai-stratum:
 	$(GOBUILD) -o ./build/bin/quai-stratum ./main.go
-
