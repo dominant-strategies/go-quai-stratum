@@ -81,10 +81,17 @@ type Tx struct {
 	Hash     string `json:"hash"`
 }
 
-type JSONRpcResp struct {
-	Id     *json.RawMessage       `json:"id"`
-	Result *json.RawMessage       `json:"result"`
-	Error  map[string]interface{} `json:"error"`
+type JsonError struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+type JsonRPCResponse struct {
+	Version string           `json:"version,omitempty"`
+	ID      json.RawMessage  `json:"id,omitempty"`
+	Error   *JsonError       `json:"error,omitempty"`
+	Result  *json.RawMessage `json:"result,omitempty"`
 }
 
 func NewRPCClient(name, url, timeout string) *RPCClient {
@@ -142,7 +149,7 @@ func (r *RPCClient) getBlockBy(method string, params []interface{}) (*types.Head
 	return nil, nil
 }
 
-func (r *RPCClient) doPost(url string, method string, params interface{}) (*JSONRpcResp, error) {
+func (r *RPCClient) doPost(url string, method string, params interface{}) (*JsonRPCResponse, error) {
 	var data []byte
 	var err error
 	if method == "quai_receiveMinedHeader" {
@@ -178,7 +185,7 @@ func (r *RPCClient) doPost(url string, method string, params interface{}) (*JSON
 	}
 	defer resp.Body.Close()
 
-	var rpcResp *JSONRpcResp
+	var rpcResp *JsonRPCResponse
 	err = json.NewDecoder(resp.Body).Decode(&rpcResp)
 	if err != nil {
 		r.markSick()
@@ -186,7 +193,7 @@ func (r *RPCClient) doPost(url string, method string, params interface{}) (*JSON
 	}
 	if rpcResp.Error != nil {
 		r.markSick()
-		return nil, errors.New(rpcResp.Error["message"].(string))
+		return nil, errors.New(rpcResp.Error.Message)
 	}
 	return rpcResp, err
 }
