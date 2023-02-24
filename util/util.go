@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
+	"github.com/dominant-strategies/go-quai/common/math"
 )
 
 var Ether = math.BigPow(10, 18)
@@ -33,8 +33,8 @@ func MakeTimestamp() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
 }
 
-func GetTargetHex(diff int64) string {
-	difficulty := big.NewInt(diff)
+func GetTargetHex(diff *hexutil.Big) string {
+	difficulty := (*big.Int)(diff)
 	diff1 := new(big.Int).Div(pow256, difficulty)
 	return string(hexutil.Encode(diff1.Bytes()))
 }
@@ -84,21 +84,21 @@ func String2Big(num string) *big.Int {
 // for NiceHash...
 // fixme: rounding error causes invalid shares
 func DiffToTarget(diff float64) (target *big.Int) {
-    mantissa := 0x0000ffff / diff
-    exp := 1
-    tmp := mantissa
-    for tmp >= 256.0 {
-        tmp /= 256.0
-        exp++
-    }
-    for i := 0; i < exp; i++ {
-        mantissa *= 256.0
-    }
-    target = new(big.Int).Lsh(big.NewInt(int64(mantissa)), uint(26-exp)*8)
-    return
+	mantissa := 0x0000ffff / diff
+	exp := 1
+	tmp := mantissa
+	for tmp >= 256.0 {
+		tmp /= 256.0
+		exp++
+	}
+	for i := 0; i < exp; i++ {
+		mantissa *= 256.0
+	}
+	target = new(big.Int).Lsh(big.NewInt(int64(mantissa)), uint(26-exp)*8)
+	return
 }
 
 func DiffFloatToDiffInt(diffFloat float64) (diffInt *big.Int) {
-    target := DiffToTarget(diffFloat)
-    return new(big.Int).Div(pow256, target)
+	target := DiffToTarget(diffFloat)
+	return new(big.Int).Div(pow256, target)
 }

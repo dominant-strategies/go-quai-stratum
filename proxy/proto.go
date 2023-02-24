@@ -1,6 +1,9 @@
 package proxy
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"github.com/dominant-strategies/go-quai/core/types"
+)
 
 type JSONRpcReq struct {
 	Id     json.RawMessage `json:"id"`
@@ -25,6 +28,13 @@ type JSONRpcResp struct {
 	Id      json.RawMessage `json:"id"`
 	Version string          `json:"jsonrpc"`
 	Result  interface{}     `json:"result"`
+	Error   interface{}     `json:"error,omitempty"`
+}
+
+type JSONHeaderResp struct {
+	Id      json.RawMessage `json:"id"`
+	Version string          `json:"jsonrpc"`
+	Result  *types.Header   `json:"result"`
 	Error   interface{}     `json:"error,omitempty"`
 }
 

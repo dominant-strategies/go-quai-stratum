@@ -1,117 +1,88 @@
 package proxy
 
 import (
+	"errors"
 	"log"
 	"math/big"
-	"strconv"
-	"strings"
+
 	"sync"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core/types"
 
-	"github.com/J-A-M-P-S/go-etcstratum/rpc"
-	"github.com/J-A-M-P-S/go-etcstratum/util"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 )
 
 const maxBacklog = 3
 
-type heightDiffPair struct {
-	diff   *big.Int
-	height uint64
-}
-
 type BlockTemplate struct {
 	sync.RWMutex
-	Header               string
-	Seed                 string
-	Target               string
-	Difficulty           *big.Int
-	Height               uint64
-	GetPendingBlockCache *rpc.GetBlockReplyPart
-	nonces               map[string]bool
-	headers              map[string]heightDiffPair
+	Header     *types.Header
+	Target     *big.Int
+	Difficulty *big.Int
+	Height     []*big.Int
+	nonces     map[string]bool
 }
 
 type Block struct {
-	difficulty  *big.Int
+	difficulty  []*hexutil.Big
 	hashNoNonce common.Hash
 	nonce       uint64
-	mixDigest   common.Hash
 	number      uint64
 }
 
-func (b Block) Difficulty() *big.Int     { return b.difficulty }
-func (b Block) HashNoNonce() common.Hash { return b.hashNoNonce }
-func (b Block) Nonce() uint64            { return b.nonce }
-func (b Block) MixDigest() common.Hash   { return b.mixDigest }
-func (b Block) NumberU64() uint64        { return b.number }
+func (b Block) Difficulty() []*hexutil.Big { return b.difficulty }
+func (b Block) HashNoNonce() common.Hash   { return b.hashNoNonce }
+func (b Block) Nonce() uint64              { return b.nonce }
+func (b Block) NumberU64() uint64          { return b.number }
 
 func (s *ProxyServer) fetchBlockTemplate() {
-	rpc := s.rpc()
+	rpc := s.rpc(common.ZONE_CTX)
 	t := s.currentBlockTemplate()
-	pendingReply, height, diff, err := s.fetchPendingBlock()
+	pendingHeader, err := rpc.GetWork()
 	if err != nil {
-		log.Printf("Error while refreshing pending block on %s: %s", rpc.Name, err)
-		return
-	}
-	reply, err := rpc.GetWork()
-	if err != nil {
-		log.Printf("Error while refreshing block template on %s: %s", rpc.Name, err)
+		log.Printf("Error while getting pending header (work) on %s: %s", rpc.Name, err)
 		return
 	}
 	// No need to update, we have fresh job
-	if t != nil && t.Header == reply[0] {
+	if t != nil && t.Header == pendingHeader {
 		return
+	} else if t != nil {
+		t.Header = pendingHeader
 	}
-
-	pendingReply.Difficulty = util.ToHex(s.config.Proxy.Difficulty)
 
 	newTemplate := BlockTemplate{
-		Header:               reply[0],
-		Seed:                 reply[1],
-		Target:               reply[2],
-		Height:               height,
-		Difficulty:           big.NewInt(diff),
-		GetPendingBlockCache: pendingReply,
-		headers:              make(map[string]heightDiffPair),
+		Header:     pendingHeader,
+		Target:     pendingHeader.DifficultyArray()[common.ZONE_CTX],
+		Height:     pendingHeader.NumberArray(),
+		Difficulty: pendingHeader.DifficultyArray()[common.ZONE_CTX],
 	}
-	// Copy job backlog and add current one
-	newTemplate.headers[reply[0]] = heightDiffPair{
-		diff:   util.TargetHexToDiff(reply[2]),
-		height: height,
-	}
-	if t != nil {
-		for k, v := range t.headers {
-			if v.height > height-maxBacklog {
-				newTemplate.headers[k] = v
-			}
-		}
-	}
-	s.blockTemplate.Store(&newTemplate)
-	log.Printf("New block to mine on %s at height %d / %s", rpc.Name, height, reply[0][0:10])
 
-	// Stratum
+	s.blockTemplate.Store(&newTemplate)
+	log.Printf("New block to mine on %s at height %d", rpc.Name, pendingHeader.NumberArray())
+
 	if s.config.Proxy.Stratum.Enabled {
 		go s.broadcastNewJobs()
 	}
 }
 
-func (s *ProxyServer) fetchPendingBlock() (*rpc.GetBlockReplyPart, uint64, int64, error) {
-	rpc := s.rpc()
-	reply, err := rpc.GetPendingBlock()
-	if err != nil {
-		log.Printf("Error while refreshing pending block on %s: %s", rpc.Name, err)
-		return nil, 0, 0, err
+var (
+	big2e256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)) // 2^256
+)
+
+// This function determines the difficulty order of a block
+func GetDifficultyOrder(header *types.Header) (int, error) {
+	if header == nil {
+		return common.HierarchyDepth, errors.New("no header provided")
 	}
-	blockNumber, err := strconv.ParseUint(strings.Replace(reply.Number, "0x", "", -1), 16, 64)
-	if err != nil {
-		log.Println("Can't parse pending block number")
-		return nil, 0, 0, err
+	blockhash := header.Hash()
+	for i, difficulty := range header.DifficultyArray() {
+		if difficulty != nil && big.NewInt(0).Cmp(difficulty) < 0 {
+			target := new(big.Int).Div(big2e256, difficulty)
+			if new(big.Int).SetBytes(blockhash.Bytes()).Cmp(target) <= 0 {
+				return i, nil
+			}
+		}
 	}
-	blockDiff, err := strconv.ParseInt(strings.Replace(reply.Difficulty, "0x", "", -1), 16, 64)
-	if err != nil {
-		log.Println("Can't parse pending block difficulty")
-		return nil, 0, 0, err
-	}
-	return reply, blockNumber, blockDiff, nil
+	return -1, errors.New("block does not satisfy minimum difficulty")
 }

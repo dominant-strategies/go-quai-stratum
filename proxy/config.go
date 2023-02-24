@@ -1,10 +1,10 @@
 package proxy
 
 import (
-	"github.com/J-A-M-P-S/go-etcstratum/api"
-	"github.com/J-A-M-P-S/go-etcstratum/payouts"
-	"github.com/J-A-M-P-S/go-etcstratum/policy"
-	"github.com/J-A-M-P-S/go-etcstratum/storage"
+	"github.com/dominant-strategies/go-quai-stratum/api"
+	"github.com/dominant-strategies/go-quai-stratum/policy"
+	"github.com/dominant-strategies/go-quai-stratum/storage"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
 )
 
 type Config struct {
@@ -30,15 +30,15 @@ type Config struct {
 }
 
 type Proxy struct {
-	Enabled              bool   `json:"enabled"`
-	Listen               string `json:"listen"`
-	LimitHeadersSize     int    `json:"limitHeadersSize"`
-	LimitBodySize        int64  `json:"limitBodySize"`
-	BehindReverseProxy   bool   `json:"behindReverseProxy"`
-	BlockRefreshInterval string `json:"blockRefreshInterval"`
-	Difficulty           int64  `json:"difficulty"`
-	StateUpdateInterval  string `json:"stateUpdateInterval"`
-	HashrateExpiration   string `json:"hashrateExpiration"`
+	Enabled              bool         `json:"enabled"`
+	Listen               string       `json:"listen"`
+	LimitHeadersSize     int          `json:"limitHeadersSize"`
+	LimitBodySize        int64        `json:"limitBodySize"`
+	BehindReverseProxy   bool         `json:"behindReverseProxy"`
+	BlockRefreshInterval string       `json:"blockRefreshInterval"`
+	Difficulty           *hexutil.Big `json:"difficulty"`
+	StateUpdateInterval  string       `json:"stateUpdateInterval"`
+	HashrateExpiration   string       `json:"hashrateExpiration"`
 
 	Policy policy.Config `json:"policy"`
 

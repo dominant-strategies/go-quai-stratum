@@ -3,17 +3,23 @@ package proxy
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
+
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"time"
 
-	"github.com/J-A-M-P-S/go-etcstratum/util"
+	"github.com/INFURA/go-ethlibs/jsonrpc"
+	"github.com/dominant-strategies/go-quai-stratum/util"
+
+	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/quaiclient"
 )
 
 const (
-	MaxReqSize = 1024
+	c_Max_Req_Size = 4096
 )
 
 func (s *ProxyServer) ListenTCP() {
@@ -32,8 +38,8 @@ func (s *ProxyServer) ListenTCP() {
 
 	log.Printf("Stratum listening on %s", s.config.Proxy.Stratum.Listen)
 	var accept = make(chan int, s.config.Proxy.Stratum.MaxConn)
-	n := 0
 
+	n := 0
 	for {
 		conn, err := server.AcceptTCP()
 		if err != nil {
@@ -64,13 +70,14 @@ func (s *ProxyServer) ListenTCP() {
 
 func (s *ProxyServer) handleTCPClient(cs *Session) error {
 	cs.enc = json.NewEncoder(cs.conn)
-	connbuff := bufio.NewReaderSize(cs.conn, MaxReqSize)
-	s.setDeadline(cs.conn)
+	connbuff := bufio.NewReaderSize(cs.conn, c_Max_Req_Size)
 	for {
 		data, isPrefix, err := connbuff.ReadLine()
 		if isPrefix {
 			log.Printf("Socket flood detected from %s", cs.ip)
+			cs.sendTCPError(jsonrpc.LimitExceeded(fmt.Sprintf("Message exceeds proxy's buffer size of %v", c_Max_Req_Size)))
 			s.policy.BanClient(cs.ip)
+			s.removeSession(cs)
 			return err
 		} else if err == io.EOF {
 			log.Printf("Client %s disconnected", cs.ip)
@@ -82,14 +89,13 @@ func (s *ProxyServer) handleTCPClient(cs *Session) error {
 		}
 
 		if len(data) > 1 {
-			var req StratumReq
-			err = json.Unmarshal(data, &req)
+			var req jsonrpc.Request
+			err = req.UnmarshalJSON(data)
 			if err != nil {
 				s.policy.ApplyMalformedPolicy(cs.ip)
 				log.Printf("Malformed stratum request from %s: %v", cs.ip, err)
 				return err
 			}
-			s.setDeadline(cs.conn)
 			err = cs.handleTCPMessage(s, &req)
 			if err != nil {
 				return err
@@ -99,77 +105,76 @@ func (s *ProxyServer) handleTCPClient(cs *Session) error {
 	return nil
 }
 
-func (cs *Session) handleTCPMessage(s *ProxyServer, req *StratumReq) error {
+func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error {
 	// Handle RPC methods
 	switch req.Method {
-	case "eth_submitLogin":
-		var params []string
-		err := json.Unmarshal(req.Params, &params)
-		if err != nil {
-			log.Println("Malformed stratum request params from", cs.ip)
-			return err
-		}
-		reply, errReply := s.handleLoginRPC(cs, params, req.Worker)
+	case "quai_submitLogin":
+		_, errReply := s.handleLoginRPC(cs, req.Params)
 		if errReply != nil {
-			return cs.sendTCPError(req.Id, errReply)
+			return cs.sendTCPError(jsonrpc.MethodNotFound(req))
 		}
-		return cs.sendTCPResult(req.Id, reply)
-	case "eth_getWork":
+		return nil
+	case "quai_getPendingHeader":
 		reply, errReply := s.handleGetWorkRPC(cs)
 		if errReply != nil {
-			return cs.sendTCPError(req.Id, errReply)
+			return cs.sendTCPError(jsonrpc.NewError(-1, errReply.Message))
 		}
-		return cs.sendTCPResult(req.Id, &reply)
-	case "eth_submitWork":
-		var params []string
-		err := json.Unmarshal(req.Params, &params)
+		header_rep := quaiclient.RPCMarshalHeader(reply)
+		cs.sendTCPResult(req.ID.String(), header_rep)
+		return nil
+	case "quai_receiveMinedHeader":
+		var received_header *types.Header
+		err := json.Unmarshal(req.Params[0], &received_header)
 		if err != nil {
-			log.Println("Malformed stratum request params from", cs.ip)
+			log.Printf("Unable to decode header from %v. Err: %v", cs.ip, err)
 			return err
 		}
-		reply, errReply := s.handleTCPSubmitRPC(cs, req.Worker, params)
-		if errReply != nil {
-			return cs.sendTCPError(req.Id, errReply)
+		order, err := GetDifficultyOrder(received_header)
+		if err != nil {
+			log.Fatalf("Unable to get order of mined headr: %v", err)
+			return err
 		}
-		return cs.sendTCPResult(req.Id, &reply)
-	case "eth_submitHashrate":
-		return cs.sendTCPResult(req.Id, true)
+
+		// Send mined header to the relevant go-quai nodes.
+		// Should be synchronous starting with the lowest levels.
+		for i := common.HierarchyDepth - 1; i >= order; i-- {
+			s.rpc(i).SubmitMinedHeader(received_header)
+		}
+
+		return nil
 	default:
-		errReply := s.handleUnknownRPC(cs, req.Method)
-		return cs.sendTCPError(req.Id, errReply)
+		return cs.sendTCPError(jsonrpc.MethodNotFound(req))
 	}
 }
 
-func (cs *Session) sendTCPResult(id json.RawMessage, result interface{}) error {
+func (cs *Session) sendTCPResult(id string, result interface{}) error {
 	cs.Lock()
 	defer cs.Unlock()
 
-	message := JSONRpcResp{Id: id, Version: "2.0", Error: nil, Result: result}
-	return cs.enc.Encode(&message)
-}
-
-func (cs *Session) pushNewJob(result interface{}) error {
-	cs.Lock()
-	defer cs.Unlock()
-	// FIXME: Temporarily add ID for Claymore compliance
-	message := JSONPushMessage{Version: "2.0", Result: result, Id: 0}
-	return cs.enc.Encode(&message)
-}
-
-func (cs *Session) sendTCPError(id json.RawMessage, reply *ErrorReply) error {
-	cs.Lock()
-	defer cs.Unlock()
-
-	message := JSONRpcResp{Id: id, Version: "2.0", Error: reply}
-	err := cs.enc.Encode(&message)
-	if err != nil {
-		return err
+	message := jsonrpc.Response{
+		ID:     jsonrpc.StringID(id),
+		Result: result,
+		Error:  nil,
 	}
-	return errors.New(reply.Message)
+
+	return cs.enc.Encode(&message)
 }
 
-func (self *ProxyServer) setDeadline(conn *net.TCPConn) {
-	conn.SetDeadline(time.Now().Add(self.timeout))
+func (cs *Session) pushNewJob(result *types.Header) error {
+	cs.Lock()
+	defer cs.Unlock()
+	// FIXME: Temporarily add ID for Claymore compliance <- (from J-A-M-P-S fork)
+	message := jsonrpc.NewResponse()
+	message.Result = quaiclient.RPCMarshalHeader(result)
+
+	return cs.enc.Encode(message)
+}
+
+func (cs *Session) sendTCPError(err *jsonrpc.Error) error {
+	cs.Lock()
+	defer cs.Unlock()
+
+	return cs.enc.Encode(err)
 }
 
 func (s *ProxyServer) registerSession(cs *Session) {
@@ -186,10 +191,10 @@ func (s *ProxyServer) removeSession(cs *Session) {
 
 func (s *ProxyServer) broadcastNewJobs() {
 	t := s.currentBlockTemplate()
-	if t == nil || len(t.Header) == 0 || s.isSick() {
+	if t == nil || t.Header == nil || s.isSick() {
 		return
 	}
-	reply := []string{t.Header, t.Seed, s.diff}
+	reply := t.Header
 
 	s.sessionsMu.RLock()
 	defer s.sessionsMu.RUnlock()
@@ -201,18 +206,16 @@ func (s *ProxyServer) broadcastNewJobs() {
 	bcast := make(chan int, 1024)
 	n := 0
 
-	for m, _ := range s.sessions {
+	for m := range s.sessions {
 		n++
 		bcast <- n
 
 		go func(cs *Session) {
-			err := cs.pushNewJob(&reply)
+			err := cs.pushNewJob(reply)
 			<-bcast
 			if err != nil {
 				log.Printf("Job transmit error to %v@%v: %v", cs.login, cs.ip, err)
 				s.removeSession(cs)
-			} else {
-				s.setDeadline(cs.conn)
 			}
 		}(m)
 	}

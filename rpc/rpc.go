@@ -2,19 +2,23 @@ package rpc
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"math/big"
 	"net/http"
-	"strconv"
-	"strings"
+
+	"log"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/INFURA/go-ethlibs/jsonrpc"
+	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/common/hexutil"
+	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/quaiclient"
 
-	"github.com/J-A-M-P-S/go-etcstratum/util"
+	"github.com/dominant-strategies/go-quai-stratum/util"
 )
 
 type RPCClient struct {
@@ -28,23 +32,26 @@ type RPCClient struct {
 }
 
 type GetBlockReply struct {
-	Number       string   `json:"number"`
-	Hash         string   `json:"hash"`
-	Nonce        string   `json:"nonce"`
-	Miner        string   `json:"miner"`
-	Difficulty   string   `json:"difficulty"`
-	GasLimit     string   `json:"gasLimit"`
-	GasUsed      string   `json:"gasUsed"`
-	Timestamp    string   `json:"timestamp"`
-	Transactions []Tx     `json:"transactions"`
-	Uncles       []string `json:"uncles"`
-	// https://github.com/ethereum/EIPs/issues/95
-	SealFields []string `json:"sealFields"`
-}
-
-type GetBlockReplyPart struct {
-	Number     string `json:"number"`
-	Difficulty string `json:"difficulty"`
+	ParentHash    []common.Hash    `json:"parentHash"          gencodec:"required"`
+	UncleHash     []common.Hash    `json:"sha3Uncles"          gencodec:"required"`
+	Coinbase      []common.Address `json:"miner"               gencodec:"required"`
+	Root          []common.Hash    `json:"stateRoot"           gencodec:"required"`
+	TxHash        []common.Hash    `json:"transactionsRoot"    gencodec:"required"`
+	EtxHash       []common.Hash    `json:"extTransactionsRoot" gencodec:"required"`
+	EtxRollupHash []common.Hash    `json:"extRollupRoot"       gencodec:"required"`
+	ManifestHash  []common.Hash    `json:"manifestHash"        gencodec:"required"`
+	ReceiptHash   []common.Hash    `json:"receiptsRoot"        gencodec:"required"`
+	Bloom         []types.Bloom    `json:"logsBloom"           gencodec:"required"`
+	Difficulty    []big.Int        `json:"difficulty"          gencodec:"required"`
+	Number        []big.Int        `json:"number"              gencodec:"required"`
+	GasLimit      []hexutil.Uint64 `json:"gasLimit"            gencodec:"required"`
+	GasUsed       []hexutil.Uint64 `json:"gasUsed"             gencodec:"required"`
+	BaseFee       []*hexutil.Big   `json:"baseFeePerGas"       gencodec:"required"`
+	Location      common.Location  `json:"location"            gencodec:"required"`
+	Time          hexutil.Uint64   `json:"timestamp"           gencodec:"required"`
+	Extra         hexutil.Bytes    `json:"extraData"           gencodec:"required"`
+	Nonce         types.BlockNonce `json:"nonce"`
+	Hash          common.Hash      `json:"hash"`
 }
 
 const receiptStatusSuccessful = "0x1"
@@ -89,157 +96,77 @@ func NewRPCClient(name, url, timeout string) *RPCClient {
 	return rpcClient
 }
 
-func (r *RPCClient) GetWork() ([]string, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_getWork", []string{})
+func (r *RPCClient) GetWork() (*types.Header, error) {
+	rpcResp, err := r.doPost(r.Url, "quai_getPendingHeader", nil)
 	if err != nil {
+		log.Fatalf("Unable to post data while getting pending header: %v", err)
 		return nil, err
 	}
-	var reply []string
+	var reply *types.Header
 	err = json.Unmarshal(*rpcResp.Result, &reply)
 	return reply, err
 }
 
-func (r *RPCClient) GetPendingBlock() (*GetBlockReplyPart, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_getBlockByNumber", []interface{}{"pending", false})
-	if err != nil {
-		return nil, err
-	}
-	if rpcResp.Result != nil {
-		var reply *GetBlockReplyPart
-		err = json.Unmarshal(*rpcResp.Result, &reply)
-		return reply, err
-	}
-	return nil, nil
+func (r *RPCClient) SubmitMinedHeader(mined_header *types.Header) error {
+	header_msg := quaiclient.RPCMarshalHeader(mined_header)
+	_, err := r.doPost(r.Url, "quai_receiveMinedHeader", header_msg)
+
+	return err
 }
 
-func (r *RPCClient) GetBlockByHeight(height int64) (*GetBlockReply, error) {
-	params := []interface{}{fmt.Sprintf("0x%x", height), true}
-	return r.getBlockBy("eth_getBlockByNumber", params)
+func (r *RPCClient) GetBlockByHeight(height int64) (*types.Header, error) {
+	params := []interface{}{fmt.Sprintf("0x%x", height)}
+	return r.getBlockBy("quai_getHeaderByNumber", params)
 }
 
-func (r *RPCClient) GetBlockByHash(hash string) (*GetBlockReply, error) {
+func (r *RPCClient) GetBlockByHash(hash string) (*types.Header, error) {
 	params := []interface{}{hash, true}
 	return r.getBlockBy("eth_getBlockByHash", params)
 }
 
-func (r *RPCClient) GetUncleByBlockNumberAndIndex(height int64, index int) (*GetBlockReply, error) {
+func (r *RPCClient) GetUncleByBlockNumberAndIndex(height int64, index int) (*types.Header, error) {
 	params := []interface{}{fmt.Sprintf("0x%x", height), fmt.Sprintf("0x%x", index)}
 	return r.getBlockBy("eth_getUncleByBlockNumberAndIndex", params)
 }
 
-func (r *RPCClient) getBlockBy(method string, params []interface{}) (*GetBlockReply, error) {
+func (r *RPCClient) getBlockBy(method string, params []interface{}) (*types.Header, error) {
 	rpcResp, err := r.doPost(r.Url, method, params)
 	if err != nil {
 		return nil, err
 	}
 	if rpcResp.Result != nil {
-		var reply *GetBlockReply
+		var reply *types.Header
 		err = json.Unmarshal(*rpcResp.Result, &reply)
 		return reply, err
 	}
 	return nil, nil
-}
-
-func (r *RPCClient) GetTxReceipt(hash string) (*TxReceipt, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_getTransactionReceipt", []string{hash})
-	if err != nil {
-		return nil, err
-	}
-	if rpcResp.Result != nil {
-		var reply *TxReceipt
-		err = json.Unmarshal(*rpcResp.Result, &reply)
-		return reply, err
-	}
-	return nil, nil
-}
-
-func (r *RPCClient) SubmitBlock(params []string) (bool, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_submitWork", params)
-	if err != nil {
-		return false, err
-	}
-	var reply bool
-	err = json.Unmarshal(*rpcResp.Result, &reply)
-	return reply, err
-}
-
-func (r *RPCClient) GetBalance(address string) (*big.Int, error) {
-	rpcResp, err := r.doPost(r.Url, "eth_getBalance", []string{address, "latest"})
-	if err != nil {
-		return nil, err
-	}
-	var reply string
-	err = json.Unmarshal(*rpcResp.Result, &reply)
-	if err != nil {
-		return nil, err
-	}
-	return util.String2Big(reply), err
-}
-
-func (r *RPCClient) Sign(from string, s string) (string, error) {
-	hash := sha256.Sum256([]byte(s))
-	rpcResp, err := r.doPost(r.Url, "eth_sign", []string{from, hexutil.Encode(hash[:])})
-	var reply string
-	if err != nil {
-		return reply, err
-	}
-	err = json.Unmarshal(*rpcResp.Result, &reply)
-	if err != nil {
-		return reply, err
-	}
-	if util.IsZeroHash(reply) {
-		err = errors.New("Can't sign message, perhaps account is locked")
-	}
-	return reply, err
-}
-
-func (r *RPCClient) GetPeerCount() (int64, error) {
-	rpcResp, err := r.doPost(r.Url, "net_peerCount", nil)
-	if err != nil {
-		return 0, err
-	}
-	var reply string
-	err = json.Unmarshal(*rpcResp.Result, &reply)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseInt(strings.Replace(reply, "0x", "", -1), 16, 64)
-}
-
-func (r *RPCClient) SendTransaction(from, to, gas, gasPrice, value string, autoGas bool) (string, error) {
-	params := map[string]string{
-		"from":  from,
-		"to":    to,
-		"value": value,
-	}
-	if !autoGas {
-		params["gas"] = gas
-		params["gasPrice"] = gasPrice
-	}
-	rpcResp, err := r.doPost(r.Url, "eth_sendTransaction", []interface{}{params})
-	var reply string
-	if err != nil {
-		return reply, err
-	}
-	err = json.Unmarshal(*rpcResp.Result, &reply)
-	if err != nil {
-		return reply, err
-	}
-	/* There is an inconsistence in a "standard". Geth returns error if it can't unlock signer account,
-	 * but Parity returns zero hash 0x000... if it can't send tx, so we must handle this case.
-	 * https://github.com/ethereum/wiki/wiki/JSON-RPC#returns-22
-	 */
-	if util.IsZeroHash(reply) {
-		err = errors.New("transaction is not yet available")
-	}
-	return reply, err
 }
 
 func (r *RPCClient) doPost(url string, method string, params interface{}) (*JSONRpcResp, error) {
-	jsonReq := map[string]interface{}{"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
-	data, _ := json.Marshal(jsonReq)
+	var data []byte
+	var err error
+	if method == "quai_receiveMinedHeader" {
+		jsonReq, err := jsonrpc.MakeRequest(0, method, params)
+		if err != nil {
+			log.Fatalf("Unable to make new rpc request to go-quai: %v", err)
+			return nil, err
+		}
+		data, err = jsonReq.MarshalJSON()
+	} else {
+		jsonReq := map[string]interface{}{"jsonrpc": "2.0", "method": method, "params": params, "id": 0}
+		data, err = json.Marshal(jsonReq)
+	}
+
+	if err != nil {
+		log.Fatalf("Unable to marshal rpc request into JSON: %v", err)
+		return nil, err
+	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		log.Fatalf("Error while posting data to go-quai: %v", err)
+		return nil, err
+	}
 	req.Header.Set("Content-Length", (string)(len(data)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")

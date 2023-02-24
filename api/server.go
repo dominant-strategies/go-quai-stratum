@@ -11,12 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/gorilla/mux"
 	"github.com/robfig/cron"
 
-	"github.com/J-A-M-P-S/go-etcstratum/rpc"
-	"github.com/J-A-M-P-S/go-etcstratum/storage"
-	"github.com/J-A-M-P-S/go-etcstratum/util"
+	"github.com/dominant-strategies/go-quai-stratum/rpc"
+	"github.com/dominant-strategies/go-quai-stratum/storage"
+	"github.com/dominant-strategies/go-quai-stratum/util"
 )
 
 type ApiConfig struct {
@@ -46,8 +47,7 @@ type ApiServer struct {
 	miners              map[string]*Entry
 	minersMu            sync.RWMutex
 	statsIntv           time.Duration
-	rpc                 *rpc.RPCClient
-	genesisHash         string
+	rpc                 [common.HierarchyDepth]*rpc.RPCClient
 }
 
 type Entry struct {
@@ -56,13 +56,14 @@ type Entry struct {
 }
 
 func NewApiServer(cfg *ApiConfig, settings map[string]interface{}, backend *storage.RedisClient) *ApiServer {
-	rpcDaemon := settings["BlockUnlocker"].(map[string]interface{})["Daemon"].(string)
-	rpcTimeout := settings["BlockUnlocker"].(map[string]interface{})["Timeout"].(string)
-	rpc := rpc.NewRPCClient("BlockUnlocker", rpcDaemon, rpcTimeout)
+	rpcDaemons := [common.HierarchyDepth]*rpc.RPCClient{}
 
-	block, err := rpc.GetBlockByHeight(0)
-	if err != nil || block == nil {
-		log.Fatalf("Error while retrieving genesis block from node: %v", err)
+	for level := 0; level < common.HierarchyDepth; level++ {
+		rpcConfig := settings["Upstream"].([]interface{})[level].(map[string]interface{})
+		rpcDaemons[level] = rpc.NewRPCClient(
+			rpcConfig["Name"].(string),
+			rpcConfig["Url"].(string),
+			rpcConfig["Timeout"].(string))
 	}
 
 	hashrateWindow := util.MustParseDuration(cfg.HashrateWindow)
@@ -74,8 +75,7 @@ func NewApiServer(cfg *ApiConfig, settings map[string]interface{}, backend *stor
 		hashrateWindow:      hashrateWindow,
 		hashrateLargeWindow: hashrateLargeWindow,
 		miners:              make(map[string]*Entry),
-		rpc:                 rpc,
-		genesisHash:         block.Hash,
+		rpc:                 rpcDaemons,
 	}
 }
 
