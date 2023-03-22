@@ -77,8 +77,6 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		go proxy.ListenTCP()
 	}
 
-	proxy.fetchBlockTemplate()
-
 	proxy.hashrateExpiration = util.MustParseDuration(cfg.Proxy.HashrateExpiration)
 
 	refreshIntv := util.MustParseDuration(cfg.Proxy.BlockRefreshInterval)

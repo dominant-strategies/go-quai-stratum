@@ -16,7 +16,6 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 	"github.com/dominant-strategies/go-quai/core/types"
-	"github.com/dominant-strategies/go-quai/quaiclient"
 
 	"github.com/dominant-strategies/go-quai-stratum/util"
 )
@@ -111,11 +110,12 @@ func (r *RPCClient) GetWork() (*types.Header, error) {
 	}
 	var reply *types.Header
 	err = json.Unmarshal(*rpcResp.Result, &reply)
+	// log.Print(quaiclient.RPCMarshalHeader(reply))
 	return reply, err
 }
 
 func (r *RPCClient) SubmitMinedHeader(mined_header *types.Header) error {
-	header_msg := quaiclient.RPCMarshalHeader(mined_header)
+	header_msg := mined_header.RPCMarshalHeader()
 	_, err := r.doPost(r.Url, "quai_receiveMinedHeader", header_msg)
 
 	return err
@@ -198,14 +198,14 @@ func (r *RPCClient) doPost(url string, method string, params interface{}) (*Json
 	return rpcResp, err
 }
 
-func (r *RPCClient) Check() bool {
-	_, err := r.GetWork()
-	if err != nil {
-		return false
-	}
-	r.markAlive()
-	return !r.Sick()
-}
+// func (r *RPCClient) Check() bool {
+// 	_, err := r.GetWork()
+// 	if err != nil {
+// 		return false
+// 	}
+// 	r.markAlive()
+// 	return !r.Sick()
+// }
 
 func (r *RPCClient) Sick() bool {
 	r.RLock()

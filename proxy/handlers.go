@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"log"
 	"regexp"
 	"strconv"
@@ -18,9 +19,9 @@ var hashPattern = regexp.MustCompile("^0x[0-9a-f]{64}$")
 var workerPattern = regexp.MustCompile("^[0-9a-zA-Z-_]{1,8}$")
 
 // Clients should provide a Quai address when logging in.
-func (s *ProxyServer) handleLoginRPC(cs *Session, params jsonrpc.Params) (bool, *ErrorReply) {
+func (s *ProxyServer) handleLoginRPC(cs *Session, params jsonrpc.Params) error {
 	if len(params) == 0 {
-		return false, &ErrorReply{Code: -1, Message: "Invalid params"}
+		return fmt.Errorf("invalid params")
 	}
 
 	addy, err := strconv.Unquote(string(params[0]))
@@ -29,16 +30,19 @@ func (s *ProxyServer) handleLoginRPC(cs *Session, params jsonrpc.Params) (bool, 
 	}
 	login := strings.ToLower(addy)
 	if !util.IsValidHexAddress(login) {
-		return false, &ErrorReply{Code: -1, Message: "Invalid login"}
+		return fmt.Errorf("invalid login")
 	}
 
 	if !s.policy.ApplyLoginPolicy(login, cs.ip) {
-		return false, &ErrorReply{Code: -1, Message: "You are blacklisted"}
+		return fmt.Errorf("you are blacklisted")
 	}
 	cs.login = login
 	s.registerSession(cs)
 	log.Printf("Stratum miner connected %v@%v", login, cs.ip)
-	return true, nil
+
+	go s.broadcastNewJobs()
+
+	return nil
 }
 
 // Returns the cached header to clients.
