@@ -15,7 +15,7 @@
 		"behindReverseProxy": false,
 		"blockRefreshInterval": "120ms",
 		"stateUpdateInterval": "3s",
-		"difficulty": "4000000000",
+		"difficulty": "0x4000000000",
 		"DifficultyNiceHash": 4,
 		"hashrateExpiration": "3h",
 
