@@ -31,7 +31,7 @@ func startApi() {
 }
 
 func readConfig(cfg *proxy.Config) {
-	configFileName := "config.json"
+	configFileName := "config/config.json"
 	if len(os.Args) > 1 {
 		configFileName = os.Args[1]
 	}
