@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/INFURA/go-ethlibs v0.0.0-20230210163729-fc6ca4235802
 	github.com/J-A-M-P-S/structs v1.1.0
-	github.com/dominant-strategies/go-quai v0.2.0-rc.0
+	github.com/dominant-strategies/go-quai v0.1.0-rc.0
 	github.com/gorilla/mux v1.8.0
 	github.com/robfig/cron v1.2.0
 	gopkg.in/redis.v3 v3.6.4
