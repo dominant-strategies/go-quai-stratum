@@ -101,8 +101,8 @@ github.com/dgryski/go-sip13 v0.0.0-20181026042036-e10d5fee7954/go.mod h1:vAd38F8
 github.com/dlclark/regexp2 v1.2.0/go.mod h1:2pZnwuY/m+8K6iRw6wQdMtk+rH5tNGR1i55kozfMjCc=
 github.com/docker/docker v1.4.2-0.20180625184442-8e610b2b55bf/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
 github.com/dominant-strategies/bn256 v0.0.0-20220930122411-fbf930a7493d/go.mod h1:nvtPJPChairu4o4iX2XGrstOFpLaAgNYhrUCl5bSng4=
-github.com/dominant-strategies/go-quai v0.2.0-rc.0 h1:oqI54xp3lYS6dNVAmpjs6LE6I4biOMQCZGawoQylgq0=
-github.com/dominant-strategies/go-quai v0.2.0-rc.0/go.mod h1:Nc53KCtvsN2OC63EIiRgTeIcGxrCafwr6KdeO0PAAAk=
+github.com/dominant-strategies/go-quai v0.1.0-rc.0 h1:PN/1srzyLRXbD9A3e44DrjBh8RMTg1gM9++5Ntcj9Yo=
+github.com/dominant-strategies/go-quai v0.1.0-rc.0/go.mod h1:Nc53KCtvsN2OC63EIiRgTeIcGxrCafwr6KdeO0PAAAk=
 github.com/dop251/goja v0.0.0-20200721192441-a695b0cdd498/go.mod h1:Mw6PkjjMXWbTj+nnj4s3QPXq1jaT0s5pC0iFD4+BOAA=
 github.com/eclipse/paho.mqtt.golang v1.2.0/go.mod h1:H9keYFcgq3Qr5OUJm/JZI/i6U7joQ8SYLhZwfeOo6Ts=
 github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
