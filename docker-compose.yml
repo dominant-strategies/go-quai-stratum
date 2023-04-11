@@ -1,3 +1,6 @@
+x-defaults:
+  image:
+    pull: always
 services:
   prime:
     environment:
