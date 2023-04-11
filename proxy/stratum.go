@@ -133,7 +133,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 		}
 		order, err := received_header.CalcOrder()
 		if err != nil {
-			log.Fatalf("Received header does not achieve minimum difficulty. Rejecting.")
+			log.Print("Received header does not achieve minimum difficulty. Rejecting.")
 			return nil
 		}
 
@@ -145,6 +145,8 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 
 		return nil
 	case "quai_rawHeader":
+		go s.broadcastNewJobs()
+
 		stripped := string(req.Params[0][1 : len(req.Params[0])-1])
 		log.Print("Received new solution: ", stripped)
 
@@ -164,15 +166,11 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 
 		hash := cur_header.Hash().Bytes()
 		log.Printf("Hash: %x", hash)
-		// comparison := new(big.Int).SetBytes(hash).Cmp(blake3pow.DifficultyToTarget(cur_header.Difficulty()))
-		// if comparison != -1 {
-		// 	return errors.New("Received header does not achieve minimum difficulty. Rejecting.")
-		// }
 
 		order, err := cur_header.CalcOrder()
 		if err != nil {
-			log.Fatalf("Received header does not achieve minimum difficulty. Rejecting.")
-			return err
+			log.Print("Received header does not achieve minimum difficulty. Rejecting.")
+			return nil
 		}
 
 		// Send mined header to the relevant go-quai nodes.
