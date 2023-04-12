@@ -14,6 +14,7 @@ import (
 	"github.com/dominant-strategies/go-quai-stratum/api"
 	"github.com/dominant-strategies/go-quai-stratum/proxy"
 	"github.com/dominant-strategies/go-quai-stratum/storage"
+	"github.com/dominant-strategies/go-quai/common"
 )
 
 var cfg proxy.Config
@@ -32,9 +33,6 @@ func startApi() {
 
 func readConfig(cfg *proxy.Config) {
 	configFileName := "config/config.json"
-	if len(os.Args) > 1 {
-		configFileName = os.Args[1]
-	}
 	configFileName, _ = filepath.Abs(configFileName)
 	log.Printf("Loading config: %v", configFileName)
 
@@ -46,6 +44,12 @@ func readConfig(cfg *proxy.Config) {
 	jsonParser := json.NewDecoder(configFile)
 	if err := jsonParser.Decode(&cfg); err != nil {
 		log.Fatal("Config error: ", err.Error())
+	}
+	if len(os.Args) == 5 {
+		cfg.Upstream[common.PRIME_CTX].Url = os.Args[1]
+		cfg.Upstream[common.REGION_CTX].Url = os.Args[2]
+		cfg.Upstream[common.ZONE_CTX].Url = os.Args[3]
+		cfg.Proxy.Stratum.Listen = os.Args[4]
 	}
 }
 
@@ -76,6 +80,7 @@ func main() {
 	if cfg.Api.Enabled {
 		go startApi()
 	}
+
 	quit := make(chan bool)
 	<-quit
 }
