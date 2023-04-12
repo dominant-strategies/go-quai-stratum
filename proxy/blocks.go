@@ -61,8 +61,8 @@ func (s *ProxyServer) fetchBlockTemplate() {
 
 	newTemplate := BlockTemplate{
 		Header: pendingHeader,
-		Target: blake3pow.DifficultyToTarget(pendingHeader.Difficulty()),
-		// Target: tempTarget,
+		// Target: blake3pow.DifficultyToTarget(pendingHeader.Difficulty()),
+		Target: blake3pow.DifficultyToTarget(big.NewInt(8800000000)),
 		Height: pendingHeader.NumberArray(),
 	}
 
