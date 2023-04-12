@@ -73,7 +73,6 @@ func (s *ProxyServer) handleTCPClient(cs *Session) error {
 	connbuff := bufio.NewReaderSize(cs.conn, c_Max_Req_Size)
 	for {
 		data, isPrefix, err := connbuff.ReadLine()
-		// data, isPrefix, err := connbuff.ReadLine()
 		if isPrefix {
 			log.Printf("Socket flood detected from %s", cs.ip)
 			cs.sendTCPError(jsonrpc.LimitExceeded(fmt.Sprintf("Message exceeds proxy's buffer size of %v", c_Max_Req_Size)))
@@ -97,7 +96,6 @@ func (s *ProxyServer) handleTCPClient(cs *Session) error {
 				log.Printf("Malformed stratum request from %s: %v", cs.ip, err)
 				return err
 			}
-			// log.Print("Param print", req.Params[0]);
 			err = cs.handleTCPMessage(s, &req)
 			if err != nil {
 				return err
@@ -151,7 +149,6 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 		log.Print("Received new solution: ", stripped)
 
 		received_nonce, _ := hex.DecodeString(stripped)
-		// blockNonce := types.ByteNonce(received_nonce)
 		nonce_u64 := binary.BigEndian.Uint64(received_nonce)
 		blockNonce := types.EncodeNonce(nonce_u64)
 
@@ -162,7 +159,6 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 		}
 
 		cur_header.SetNonce(blockNonce)
-		// log.Print("Received new solution: ", cur_header.Nonce())
 
 		hash := cur_header.Hash().Bytes()
 		log.Printf("Hash: %x", hash)
@@ -271,8 +267,5 @@ func (s *ProxyServer) broadcastNewJobs() {
 			}
 		}(m)
 	}
-	// if count == 1 {
-	// 	log.Print("here")
-	// }
 	// log.Printf("Jobs broadcast finished %s", time.Since(start))
 }

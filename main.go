@@ -9,11 +9,6 @@ import (
 	"runtime"
 	"time"
 
-	// "lukechampine.com/blake3"
-	// "github.com/dominant-strategies/go-quai/common"
-
-	// "encoding/hex"
-
 	"github.com/J-A-M-P-S/structs"
 
 	"github.com/dominant-strategies/go-quai-stratum/api"
@@ -38,9 +33,6 @@ func startApi() {
 
 func readConfig(cfg *proxy.Config) {
 	configFileName := "config/config.json"
-	// if len(os.Args) > 1 {
-		// configFileName = os.Args[1]
-	// }
 	configFileName, _ = filepath.Abs(configFileName)
 	log.Printf("Loading config: %v", configFileName)
 
