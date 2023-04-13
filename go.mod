@@ -1,11 +1,13 @@
 module github.com/dominant-strategies/go-quai-stratum
 
-go 1.19
+go 1.20
+
+// replace github.com/dominant-strategies/go-quai => ../go-quai
 
 require (
-	github.com/INFURA/go-ethlibs v0.0.0-20230210163729-fc6ca4235802
+	github.com/INFURA/go-ethlibs v0.0.0-20230222175239-ea21e114f25c
 	github.com/J-A-M-P-S/structs v1.1.0
-	github.com/dominant-strategies/go-quai v0.1.0-rc.0
+	github.com/dominant-strategies/go-quai v0.5.0-rc.0
 	github.com/gorilla/mux v1.8.0
 	github.com/robfig/cron v1.2.0
 	gopkg.in/redis.v3 v3.6.4
@@ -31,6 +33,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/tsdb v0.7.1 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954 // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
@@ -39,4 +42,5 @@ require (
 	golang.org/x/sys v0.0.0-20220731174439-a90be440212d // indirect
 	gopkg.in/bsm/ratelimit.v1 v1.0.0-20170922094635-f56db5e73a5e // indirect
 	lukechampine.com/blake3 v1.1.7 // indirect
+	modernc.org/mathutil v1.5.0 // indirect
 )

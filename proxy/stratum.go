@@ -2,20 +2,19 @@ package proxy
 
 import (
 	"bufio"
+	"encoding/hex"
 	"encoding/json"
-
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net"
-	"time"
+	"strings"
 
 	"github.com/INFURA/go-ethlibs/jsonrpc"
 	"github.com/dominant-strategies/go-quai-stratum/util"
-
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
-	"github.com/dominant-strategies/go-quai/quaiclient"
 )
 
 const (
@@ -109,7 +108,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 	// Handle RPC methods
 	switch req.Method {
 	case "quai_submitLogin":
-		_, errReply := s.handleLoginRPC(cs, req.Params)
+		errReply := s.handleLoginRPC(cs, req.Params)
 		if errReply != nil {
 			return cs.sendTCPError(jsonrpc.MethodNotFound(req))
 		}
@@ -119,7 +118,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 		if errReply != nil {
 			return cs.sendTCPError(jsonrpc.NewError(-1, errReply.Message))
 		}
-		header_rep := quaiclient.RPCMarshalHeader(reply)
+		header_rep := reply.RPCMarshalHeader()
 		cs.sendTCPResult(req.ID.String(), header_rep)
 		return nil
 	case "quai_receiveMinedHeader":
@@ -129,16 +128,49 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 			log.Printf("Unable to decode header from %v. Err: %v", cs.ip, err)
 			return err
 		}
-		order, err := GetDifficultyOrder(received_header)
+		order, err := received_header.CalcOrder()
 		if err != nil {
-			log.Fatalf("Unable to get order of mined headr: %v", err)
-			return err
+			log.Print("Received header does not achieve minimum difficulty. Rejecting.")
+			return nil
 		}
 
 		// Send mined header to the relevant go-quai nodes.
 		// Should be synchronous starting with the lowest levels.
 		for i := common.HierarchyDepth - 1; i >= order; i-- {
 			s.rpc(i).SubmitMinedHeader(received_header)
+		}
+
+		return nil
+	case "quai_rawHeader":
+		stripped := string(req.Params[0][1 : len(req.Params[0])-1])
+		log.Print("Received new solution: ", stripped)
+
+		received_nonce, _ := hex.DecodeString(stripped)
+		blockNonce := types.BlockNonce(received_nonce)
+
+		cur_header, errReply := s.handleGetWorkRPC(cs)
+		if errReply != nil {
+			log.Printf("Unable to get current header: %v", errReply)
+			return nil
+		}
+
+		cur_header.SetNonce(blockNonce)
+
+		hash := cur_header.Hash().Bytes()
+		log.Printf("Hash: %x", hash)
+
+		order, err := cur_header.CalcOrder()
+		if err != nil {
+			log.Print("Received header does not achieve minimum difficulty. Rejecting.")
+			return nil
+		}
+
+		// Send mined header to the relevant go-quai nodes.
+		// Should be synchronous starting with the lowest levels.
+		log.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
+
+		for i := common.HierarchyDepth - 1; i >= order; i-- {
+			s.rpc(i).SubmitMinedHeader(cur_header)
 		}
 
 		return nil
@@ -160,14 +192,23 @@ func (cs *Session) sendTCPResult(id string, result interface{}) error {
 	return cs.enc.Encode(&message)
 }
 
-func (cs *Session) pushNewJob(result *types.Header) error {
+func (cs *Session) pushNewJob(result *types.Header, target *big.Int) error {
 	cs.Lock()
 	defer cs.Unlock()
-	// FIXME: Temporarily add ID for Claymore compliance <- (from J-A-M-P-S fork)
-	message := jsonrpc.NewResponse()
-	message.Result = quaiclient.RPCMarshalHeader(result)
 
-	return cs.enc.Encode(message)
+	targetBytes := make([]byte, 32)
+	target.FillBytes(targetBytes)
+
+	message := append(targetBytes, result.SealHash().Bytes()...)
+
+	bytes_written, err := cs.conn.Write(message)
+	if err != nil {
+		log.Fatalf("Unable to write to socket: %v", err)
+		return err
+	}
+	log.Printf("Bytes written: %v", bytes_written)
+
+	return nil
 }
 
 func (cs *Session) sendTCPError(err *jsonrpc.Error) error {
@@ -191,10 +232,9 @@ func (s *ProxyServer) removeSession(cs *Session) {
 
 func (s *ProxyServer) broadcastNewJobs() {
 	t := s.currentBlockTemplate()
-	if t == nil || t.Header == nil || s.isSick() {
+	if t == nil || t.Header == nil || t.Target == nil || s.isSick() {
 		return
 	}
-	reply := t.Header
 
 	s.sessionsMu.RLock()
 	defer s.sessionsMu.RUnlock()
@@ -202,7 +242,6 @@ func (s *ProxyServer) broadcastNewJobs() {
 	count := len(s.sessions)
 	log.Printf("Broadcasting new job to %v stratum miners", count)
 
-	start := time.Now()
 	bcast := make(chan int, 1024)
 	n := 0
 
@@ -211,7 +250,8 @@ func (s *ProxyServer) broadcastNewJobs() {
 		bcast <- n
 
 		go func(cs *Session) {
-			err := cs.pushNewJob(reply)
+
+			err := cs.pushNewJob(t.Header, t.Target)
 			<-bcast
 			if err != nil {
 				log.Printf("Job transmit error to %v@%v: %v", cs.login, cs.ip, err)
@@ -219,5 +259,4 @@ func (s *ProxyServer) broadcastNewJobs() {
 			}
 		}(m)
 	}
-	log.Printf("Jobs broadcast finished %s", time.Since(start))
 }
