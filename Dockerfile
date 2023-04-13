@@ -15,4 +15,4 @@ COPY --from=builder /go-quai-stratum/build/bin ./build/bin
 
 WORKDIR ./
 
-CMD ./build/bin/quai-stratum config.json
+CMD ./build/bin/quai-stratum config/config.json
