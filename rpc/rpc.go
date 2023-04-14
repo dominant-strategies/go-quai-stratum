@@ -105,7 +105,7 @@ func NewRPCClient(name, url, timeout string) *RPCClient {
 func (r *RPCClient) GetWork() (*types.Header, error) {
 	rpcResp, err := r.doPost(r.Url, "quai_getPendingHeader", nil)
 	if err != nil {
-		log.Fatalf("Unable to post data while getting pending header: %v", err)
+		log.Printf("Unable to post data while getting pending header: %v", err)
 		return nil, err
 	}
 	var reply *types.Header
