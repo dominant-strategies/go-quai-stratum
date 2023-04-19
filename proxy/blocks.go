@@ -45,10 +45,8 @@ func (s *ProxyServer) fetchBlockTemplate() {
 	// Short circuit if the pending header is the same as the current one
 	if t != nil && t.Header != nil && t.Header.SealHash() == pendingHeader.SealHash() {
 		return
-	} else if t != nil {
-		t.Header = pendingHeader
 	}
-
+	
 	newTemplate := BlockTemplate{
 		Header: pendingHeader,
 		Target: blake3pow.DifficultyToTarget(pendingHeader.Difficulty()),
