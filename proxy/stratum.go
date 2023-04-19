@@ -137,7 +137,11 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 		// Send mined header to the relevant go-quai nodes.
 		// Should be synchronous starting with the lowest levels.
 		for i := common.HierarchyDepth - 1; i >= order; i-- {
-			s.rpc(i).SubmitMinedHeader(received_header)
+			err := s.rpc(i).SubmitMinedHeader(received_header)
+			if err != nil {
+				// Header was rejected. Refresh workers to try again.
+				go s.broadcastNewJobs()
+			}
 		}
 
 		return nil
