@@ -128,21 +128,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 			log.Printf("Unable to decode header from %v. Err: %v", cs.ip, err)
 			return err
 		}
-		order, err := received_header.CalcOrder()
-		if err != nil {
-			log.Print("Received header does not achieve minimum difficulty. Rejecting.")
-			return nil
-		}
-
-		// Send mined header to the relevant go-quai nodes.
-		// Should be synchronous starting with the lowest levels.
-		for i := common.HierarchyDepth - 1; i >= order; i-- {
-			err := s.rpc(i).SubmitMinedHeader(received_header)
-			if err != nil {
-				// Header was rejected. Refresh workers to try again.
-				go s.broadcastNewJobs()
-			}
-		}
+		s.submitMinedHeader(received_header)
 
 		return nil
 	case "quai_rawHeader":
@@ -163,19 +149,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 		hash := cur_header.Hash().Bytes()
 		log.Printf("Hash: %x", hash)
 
-		order, err := cur_header.CalcOrder()
-		if err != nil {
-			log.Print("Received header does not achieve minimum difficulty. Rejecting.")
-			return nil
-		}
-
-		// Send mined header to the relevant go-quai nodes.
-		// Should be synchronous starting with the lowest levels.
-		log.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
-
-		for i := common.HierarchyDepth - 1; i >= order; i-- {
-			s.rpc(i).SubmitMinedHeader(cur_header)
-		}
+		s.submitMinedHeader(cur_header)
 
 		return nil
 	default:
@@ -263,4 +237,28 @@ func (s *ProxyServer) broadcastNewJobs() {
 			}
 		}(m)
 	}
+}
+
+func (s *ProxyServer) submitMinedHeader(header *types.Header) {
+	order, err := header.CalcOrder()
+	if err != nil {
+		log.Print("Received header does not achieve minimum difficulty. Rejecting.")
+		go s.broadcastNewJobs()
+		return
+	}
+
+	// Should be synchronous starting with the lowest levels.
+	log.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
+
+	// Send mined header to the relevant go-quai nodes.
+	// Should be synchronous starting with the lowest levels.
+	for i := common.HierarchyDepth - 1; i >= order; i-- {
+		err := s.rpc(i).SubmitMinedHeader(header)
+		if err != nil {
+			// Header was rejected. Refresh workers to try again.
+			log.Print("Rejected header. Refreshing workers.")
+		}
+	}
+
+	go s.broadcastNewJobs()
 }
