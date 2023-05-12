@@ -128,7 +128,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 			log.Printf("Unable to decode header from %v. Err: %v", cs.ip, err)
 			return err
 		}
-		s.submitMinedHeader(received_header)
+		s.submitMinedHeader(cs, received_header)
 
 		return nil
 	case "quai_rawHeader":
@@ -149,7 +149,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *jsonrpc.Request) error 
 		hash := cur_header.Hash().Bytes()
 		log.Printf("Hash: %x", hash)
 
-		s.submitMinedHeader(cur_header)
+		s.submitMinedHeader(cs, cur_header)
 
 		return nil
 	default:
@@ -239,12 +239,18 @@ func (s *ProxyServer) broadcastNewJobs() {
 	}
 }
 
-func (s *ProxyServer) submitMinedHeader(header *types.Header) {
+func (cs *Session) sendNewJob(header *types.Header, target *big.Int) {
+	err := cs.pushNewJob(header, target)
+	if err != nil {
+		log.Printf("Job transmit error to %v@%v: %v", cs.login, cs.ip, err)
+	}
+}
+
+func (s *ProxyServer) submitMinedHeader(cs *Session, header *types.Header) error {
 	order, err := header.CalcOrder()
 	if err != nil {
 		log.Print("Received header does not achieve minimum difficulty. Rejecting.")
-		go s.broadcastNewJobs()
-		return
+		return err
 	}
 
 	// Should be synchronous starting with the lowest levels.
@@ -256,9 +262,11 @@ func (s *ProxyServer) submitMinedHeader(header *types.Header) {
 		err := s.rpc(i).SubmitMinedHeader(header)
 		if err != nil {
 			// Header was rejected. Refresh workers to try again.
-			log.Print("Rejected header. Refreshing workers.")
+			log.Print("Rejected header.")
+			cs.sendNewJob(header, s.currentBlockTemplate().Target)
+			return err
 		}
 	}
 
-	go s.broadcastNewJobs()
+	return nil
 }
