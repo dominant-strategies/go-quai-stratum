@@ -155,7 +155,6 @@ func (s *PolicyServer) refreshState() {
 	if err != nil {
 		log.Printf("Failed to get whitelist from backend: %v", err)
 	}
-	log.Println("Policy state refresh complete")
 }
 
 func (s *PolicyServer) NewStats() *Stats {

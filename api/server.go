@@ -212,7 +212,6 @@ func (s *ApiServer) purgeStale() {
 }
 
 func (s *ApiServer) collectStats() {
-	start := time.Now()
 	stats, err := s.backend.CollectStats(s.hashrateWindow, s.config.Blocks, s.config.Payments)
 	if err != nil {
 		log.Printf("Failed to fetch stats from backend: %v", err)
@@ -228,7 +227,6 @@ func (s *ApiServer) collectStats() {
 	}
 	stats["poolCharts"], err = s.backend.GetPoolCharts(s.config.PoolChartsNum)
 	s.stats.Store(stats)
-	log.Printf("Stats collection finished %s", time.Since(start))
 }
 
 func (s *ApiServer) StatsIndex(w http.ResponseWriter, r *http.Request) {
