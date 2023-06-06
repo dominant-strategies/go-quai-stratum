@@ -2,11 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"log"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/J-A-M-P-S/structs"
@@ -32,11 +33,19 @@ func startApi() {
 }
 
 func readConfig(cfg *proxy.Config) {
-	configFileName := "config/config.json"
-	configFileName, _ = filepath.Abs(configFileName)
-	log.Printf("Loading config: %v", configFileName)
+	configPath := flag.String("config", "config/config.json", "Path to config file")
+	primePort := flag.Int("prime", -1, "Prime upstream port (overrides config)")
+	regionPort := flag.Int("region", -1, "Region upstream port (overrides config)")
+	zonePort := flag.Int("zone", -1, "Zone upstream port (overrides config)")
 
-	configFile, err := os.Open(configFileName)
+	stratumPort := flag.Int("stratum", -1, "Stratum listen port (overrides config)")
+
+	flag.Parse()
+
+	log.Printf("Loading config: %v", configPath)
+
+	// Read config file.
+	configFile, err := os.Open(*configPath)
 	if err != nil {
 		log.Fatal("File error: ", err.Error())
 	}
@@ -45,11 +54,19 @@ func readConfig(cfg *proxy.Config) {
 	if err := jsonParser.Decode(&cfg); err != nil {
 		log.Fatal("Config error: ", err.Error())
 	}
-	if len(os.Args) == 5 {
-		cfg.Upstream[common.PRIME_CTX].Url = os.Args[1]
-		cfg.Upstream[common.REGION_CTX].Url = os.Args[2]
-		cfg.Upstream[common.ZONE_CTX].Url = os.Args[3]
-		cfg.Proxy.Stratum.Listen = os.Args[4]
+
+	// Perform custom overrides.
+	if primePort != nil && *primePort != -1 {
+		cfg.Upstream[common.PRIME_CTX].Url = "http://localhost:" + strconv.Itoa(*primePort)
+	}
+	if regionPort != nil && *regionPort != -1 {
+		cfg.Upstream[common.REGION_CTX].Url = "http://localhost:" + strconv.Itoa(*regionPort)
+	}
+	if zonePort != nil && *zonePort != -1 {
+		cfg.Upstream[common.ZONE_CTX].Url = "http://localhost:" + strconv.Itoa(*zonePort)
+	}
+	if *stratumPort != -1 {
+		cfg.Proxy.Stratum.Listen = "localhost:" + strconv.Itoa(*stratumPort)
 	}
 }
 
