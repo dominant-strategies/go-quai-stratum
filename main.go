@@ -72,6 +72,7 @@ func readConfig(cfg *proxy.Config) {
 
 func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.SetOutput(os.Stdout)
 }
 
 func main() {
