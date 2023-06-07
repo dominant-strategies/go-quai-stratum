@@ -57,16 +57,16 @@ func readConfig(cfg *proxy.Config) {
 
 	// Perform custom overrides.
 	if primePort != nil && *primePort != -1 {
-		cfg.Upstream[common.PRIME_CTX].Url = "http://localhost:" + strconv.Itoa(*primePort)
+		cfg.Upstream[common.PRIME_CTX].Url = "http://0.0.0.0:" + strconv.Itoa(*primePort)
 	}
 	if regionPort != nil && *regionPort != -1 {
-		cfg.Upstream[common.REGION_CTX].Url = "http://localhost:" + strconv.Itoa(*regionPort)
+		cfg.Upstream[common.REGION_CTX].Url = "http://0.0.0.0:" + strconv.Itoa(*regionPort)
 	}
 	if zonePort != nil && *zonePort != -1 {
-		cfg.Upstream[common.ZONE_CTX].Url = "http://localhost:" + strconv.Itoa(*zonePort)
+		cfg.Upstream[common.ZONE_CTX].Url = "http://0.0.0.0:" + strconv.Itoa(*zonePort)
 	}
 	if *stratumPort != -1 {
-		cfg.Proxy.Stratum.Listen = "localhost:" + strconv.Itoa(*stratumPort)
+		cfg.Proxy.Stratum.Listen = "0.0.0.0:" + strconv.Itoa(*stratumPort)
 	}
 }
 
