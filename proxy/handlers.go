@@ -4,12 +4,9 @@ import (
 	"fmt"
 	"log"
 	"regexp"
-	"strconv"
 	"strings"
 
-	"github.com/INFURA/go-ethlibs/jsonrpc"
-
-	"github.com/dominant-strategies/go-quai-stratum/util"
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 )
 
@@ -19,19 +16,21 @@ var hashPattern = regexp.MustCompile("^0x[0-9a-f]{64}$")
 var workerPattern = regexp.MustCompile("^[0-9a-zA-Z-_]{1,8}$")
 
 // Clients should provide a Quai address when logging in.
-func (s *ProxyServer) handleLoginRPC(cs *Session, params jsonrpc.Params) error {
+func (s *ProxyServer) handleLoginRPC(cs *Session, req Request) error {
+
+	params, ok := req.Params.([]interface{})
+	if !ok {
+		return fmt.Errorf("login payload doesn't conform to stratum spec")
+	}
 	if len(params) == 0 {
-		return fmt.Errorf("invalid params")
+		return fmt.Errorf("no login information provided")
 	}
 
-	addy, err := strconv.Unquote(string(params[0]))
-	if err != nil {
-		log.Printf("%v", err)
+	account, ok := params[0].(string)
+	if !ok {
+		return fmt.Errorf("account info is not a string")
 	}
-	login := strings.ToLower(addy)
-	if !util.IsValidHexAddress(login) {
-		return fmt.Errorf("invalid login")
-	}
+	login := strings.ToLower(account)
 
 	if !s.policy.ApplyLoginPolicy(login, cs.ip) {
 		return fmt.Errorf("you are blacklisted")
@@ -41,6 +40,8 @@ func (s *ProxyServer) handleLoginRPC(cs *Session, params jsonrpc.Params) error {
 	log.Printf("Stratum miner connected %v@%v", login, cs.ip)
 
 	if s.config.Proxy.Stratum.Enabled {
+		// Provide the difficulty to the client. Must be completed before `mining.notify`.
+		cs.setMining(common.BytesToHash(s.currentBlockTemplate().Target.Bytes()))
 		go s.broadcastNewJobs()
 	}
 
