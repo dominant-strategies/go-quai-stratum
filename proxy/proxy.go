@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/consensus"
+	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/gorilla/mux"
 
 	"github.com/dominant-strategies/go-quai-stratum/policy"
@@ -27,6 +29,7 @@ type ProxyServer struct {
 	policy             *policy.PolicyServer
 	hashrateExpiration time.Duration
 	failsCount         int64
+	engine             consensus.Engine
 
 	// Stratum
 	sessionsMu sync.RWMutex
@@ -60,7 +63,17 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	}
 	policy := policy.Start(&cfg.Proxy.Policy, backend)
 
-	proxy := &ProxyServer{config: cfg, upstreams: make([]*rpc.RPCClient, common.HierarchyDepth), backend: backend, policy: policy}
+	proxy := &ProxyServer{
+		config:    cfg,
+		upstreams: make([]*rpc.RPCClient, common.HierarchyDepth),
+		backend:   backend,
+		policy:    policy,
+		engine: progpow.New(
+			progpow.Config{},
+			nil,
+			false,
+		),
+	}
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
 	for level := 0; level < common.HierarchyDepth; level++ {
@@ -186,4 +199,30 @@ func (s *ProxyServer) isSick() bool {
 
 func (s *ProxyServer) markOk() {
 	atomic.StoreInt64(&s.failsCount, 0)
+}
+
+func (s *ProxyServer) fetchBlockTemplate() {
+	rpc := s.rpc(common.ZONE_CTX)
+	t := s.currentBlockTemplate()
+	pendingHeader, err := rpc.GetWork()
+	if err != nil {
+		log.Printf("Error while getting pending header (work) on %s: %s", rpc.Name, err)
+		return
+	}
+
+	// Short circuit if the pending header is the same as the current one
+	if t != nil && t.Header != nil && t.Header.SealHash() == pendingHeader.SealHash() {
+		return
+	}
+
+	newTemplate := BlockTemplate{
+		Header: pendingHeader,
+		Target: consensus.DifficultyToTarget(pendingHeader.Difficulty()),
+		Height: pendingHeader.NumberArray(),
+	}
+
+	s.blockTemplate.Store(&newTemplate)
+	log.Printf("New block to mine on %s at height %d", rpc.Name, pendingHeader.NumberArray())
+
+	go s.broadcastNewJobs()
 }
