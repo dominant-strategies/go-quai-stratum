@@ -131,7 +131,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 				"encoding":  "plain",
 				"resume":    0,
 				"timeout":   30,
-				"maxerrors": 5,
+				"maxerrors": 999,
 				"node":      "go-quai/development",
 			},
 		}
