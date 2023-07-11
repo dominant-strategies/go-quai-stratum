@@ -161,12 +161,16 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 		return s.handleLoginRPC(cs, *req)
 
 	case "mining.submit":
+		response := Response{
+			ID:    req.Id,
+			Result: true,
+		}
 		header := s.currentBlockTemplate().Header
 
 		nonce, err := hex.DecodeString(req.Params.([]interface{})[1].(string))
 		if err != nil {
 			log.Printf("Error decoding nonce: %v", err)
-			return err
+			return cs.enc.Encode(&response)
 		}
 
 		header.SetNonce(types.BlockNonce(nonce))
@@ -176,13 +180,9 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 		err = s.submitMinedHeader(cs, header)
 		if err != nil {
 			log.Printf("Error submitting header: %v", err)
-			return err
+			return cs.enc.Encode(&response)
 		}
-		respones := Response{
-			ID:     req.Id,
-			Result: true,
-		}
-		return cs.enc.Encode(&respones)
+		return cs.enc.Encode(&response)
 
 	default:
 		return nil
