@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -135,7 +136,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 				"node":      "go-quai/development",
 			},
 		}
-		return cs.enc.Encode(&response)
+		return cs.sendMessage(&response)
 
 	case "mining.bye":
 		s.removeSession(cs)
@@ -146,14 +147,14 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 			ID:     req.Id,
 			Result: "s-12345",
 		}
-		return cs.enc.Encode(&response)
+		return cs.sendMessage(&response)
 
 	case "mining.authorize":
 		response := Response{
 			ID:     req.Id,
 			Result: "s-12345",
 		}
-		err := cs.enc.Encode(&response)
+		err := cs.sendMessage(&response)
 		if err != nil {
 			log.Printf("Error encoding JSON: %v", err)
 			return err
@@ -174,7 +175,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 					"message": "Invalid nonce parameter",
 				},
 			}
-			return cs.enc.Encode(&errorResponse)
+			return cs.sendMessage(&errorResponse)
 		}
 
 		header.SetNonce(types.BlockNonce(nonce))
@@ -191,12 +192,12 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 					"message": "Bad nonce",
 				},
 			}
-			return cs.enc.Encode(&errorResponse)
+			return cs.sendMessage(&errorResponse)
 		}
 		successResponse := Response{
 			ID: req.Id,
 		}
-		return cs.enc.Encode(&successResponse)
+		return cs.sendMessage(&successResponse)
 
 	default:
 		return nil
@@ -204,45 +205,39 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 }
 
 func (cs *Session) sendTCPResult(id uint, result interface{}) error {
-	cs.Lock()
-	defer cs.Unlock()
-
 	message := Response{
 		ID:     id,
 		Result: result,
 		Error:  nil,
 	}
 
-	return cs.enc.Encode(&message)
+	return cs.sendMessage(&message)
 }
 
 func (cs *Session) sendTCPError(err error) {
-	cs.Lock()
-	defer cs.Unlock()
-
 	message := Response{
 		ID:     0,
 		Result: nil,
 		Error:  err,
 	}
 
-	cs.enc.Encode(&message)
+	cs.sendMessage(&message)
 }
 
-func (cs *Session) pushNewJob(header *types.Header) error {
-	cs.Lock()
-	defer cs.Unlock()
+func (cs *Session) pushNewJob(header *types.Header, target *big.Int) error {
+	// Update target to worker.
+	cs.setMining(common.BytesToHash(target.Bytes()))
 
 	notification := Notification{
 		Method: "mining.notify",
 		Params: []string{
-			fmt.Sprintf("%x", header.SealHash()),
+			fmt.Sprintf("%x", header.Number(common.ZONE_CTX)),
 			fmt.Sprintf("%x", header.Number(common.ZONE_CTX)),
 			fmt.Sprintf("%x", header.SealHash()),
 			"0",
 		},
 	}
-	return cs.enc.Encode(&notification)
+	return cs.sendMessage(&notification)
 }
 
 func (s *ProxyServer) registerSession(cs *Session) {
@@ -258,8 +253,6 @@ func (s *ProxyServer) removeSession(cs *Session) {
 }
 
 func (cs *Session) setMining(target common.Hash) error {
-	cs.Lock()
-	defer cs.Unlock()
 	notification := Notification{
 		Method: "mining.set",
 		Params: map[string]interface{}{
@@ -269,7 +262,7 @@ func (cs *Session) setMining(target common.Hash) error {
 			"extranonce": "",
 		},
 	}
-	return cs.enc.Encode(&notification)
+	return cs.sendMessage(&notification)
 }
 
 func (s *ProxyServer) broadcastNewJobs() {
@@ -292,20 +285,13 @@ func (s *ProxyServer) broadcastNewJobs() {
 		bcast <- n
 
 		go func(cs *Session) {
-			err := cs.pushNewJob(t.Header)
+			err := cs.pushNewJob(t.Header, t.Target)
 			<-bcast
 			if err != nil {
 				log.Printf("Job transmit error to %v@%v: %v", cs.login, cs.ip, err)
 				s.removeSession(cs)
 			}
 		}(m)
-	}
-}
-
-func (cs *Session) sendNewJob(header *types.Header, target *big.Int) {
-	err := cs.pushNewJob(header)
-	if err != nil {
-		log.Printf("Job transmit error to %v@%v: %v", cs.login, cs.ip, err)
 	}
 }
 
@@ -321,13 +307,20 @@ func (s *ProxyServer) submitMinedHeader(cs *Session, header *types.Header) error
 	// Send mined header to the relevant go-quai nodes.
 	// Should be synchronous starting with the lowest levels.
 	for i := common.HierarchyDepth - 1; i >= order; i-- {
-		err := s.rpc(i).SubmitMinedHeader(header)
+		err := s.clients[i].ReceiveMinedHeader(context.Background(), header)
 		if err != nil {
 			// Header was rejected. Refresh workers to try again.
-			cs.sendNewJob(header, s.currentBlockTemplate().Target)
+			cs.pushNewJob(s.currentBlockTemplate().Header, s.currentBlockTemplate().Target)
 			return fmt.Errorf("rejected header: %v", err)
 		}
 	}
 
 	return nil
+}
+
+func (cs *Session) sendMessage(v any) error {
+	cs.Lock()
+	defer cs.Unlock()
+
+	return cs.enc.Encode(v)
 }
