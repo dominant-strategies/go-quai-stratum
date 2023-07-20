@@ -15,6 +15,7 @@ import (
 )
 
 type Config struct {
+	Enabled  bool   `json:"enabled"`
 	Endpoint string `json:"endpoint"`
 	Password string `json:"password"`
 	Database int64  `json:"database"`
