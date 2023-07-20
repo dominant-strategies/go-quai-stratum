@@ -72,17 +72,17 @@
 	"upstream": [
 		{
 			"name": "prime",
-			"url": "http://127.0.0.1:8546",
+			"url": "ws://127.0.0.1:8547",
 			"timeout": "10s"
 		},
 		{
 			"name": "region",
-			"url": "http://127.0.0.1:8578",
+			"url": "ws://127.0.0.1:8579",
 			"timeout": "10s"
 		},
 		{
 			"name": "zone",
-			"url": "http://127.0.0.1:8610",
+			"url": "ws://127.0.0.1:8611",
 			"timeout": "10s"
 		}
 	],

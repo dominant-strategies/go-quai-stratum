@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"sync"
@@ -12,10 +14,11 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
+	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/quaiclient/ethclient"
 	"github.com/gorilla/mux"
 
 	"github.com/dominant-strategies/go-quai-stratum/policy"
-	"github.com/dominant-strategies/go-quai-stratum/rpc"
 	"github.com/dominant-strategies/go-quai-stratum/storage"
 	"github.com/dominant-strategies/go-quai-stratum/util"
 )
@@ -23,13 +26,17 @@ import (
 type ProxyServer struct {
 	config             *Config
 	blockTemplate      atomic.Value
-	upstreams          []*rpc.RPCClient
+	upstreams          *[]Upstream
+	clients            SliceClients
 	backend            *storage.RedisClient
 	diff               string
 	policy             *policy.PolicyServer
 	hashrateExpiration time.Duration
 	failsCount         int64
 	engine             consensus.Engine
+
+	// Channel to receive header updates
+	updateCh chan *types.Header
 
 	// Stratum
 	sessionsMu sync.RWMutex
@@ -57,6 +64,8 @@ type Session struct {
 	JobDetails     jobDetails
 }
 
+type SliceClients [common.HierarchyDepth]*ethclient.Client
+
 func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	if len(cfg.Name) == 0 {
 		log.Fatal("You must set instance name")
@@ -65,7 +74,7 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 
 	proxy := &ProxyServer{
 		config:    cfg,
-		upstreams: make([]*rpc.RPCClient, common.HierarchyDepth),
+		upstreams: &cfg.Upstream,
 		backend:   backend,
 		policy:    policy,
 		engine: progpow.New(
@@ -73,17 +82,11 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 			nil,
 			false,
 		),
+		updateCh: make(chan *types.Header),
 	}
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
-	for level := 0; level < common.HierarchyDepth; level++ {
-		// Eventually we should verify with the "name" that it's in the correct order.
-		proxy.upstreams[level] = rpc.NewRPCClient(
-			cfg.Upstream[level].Name,
-			cfg.Upstream[level].Url,
-			cfg.Upstream[level].Timeout,
-		)
-	}
+	proxy.clients = proxy.connectToSlice()
 
 	if cfg.Proxy.Stratum.Enabled {
 		proxy.sessions = make(map[*Session]struct{})
@@ -109,30 +112,39 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		}
 	}()
 
-	go func() {
-		for {
-			select {
-			case <-stateUpdateTimer.C:
-				t := proxy.currentBlockTemplate()
-				if t != nil {
-					rpc := proxy.rpc(common.ZONE_CTX)
-					height := t.Height[common.ZONE_CTX].Int64() - 1
-					prev := height - cfg.BlockTimeWindow
-					if prev < 0 {
-						prev = 0
-					}
-					n := height - prev
-					if n > 0 {
-						block, err := rpc.GetBlockByHeight(height)
-						if err != nil || block == nil {
-							log.Printf("Error while retrieving block from node: %v", err)
-							proxy.markSick()
+	if cfg.Redis.Enabled {
+		go func() {
+			for {
+				select {
+				case <-stateUpdateTimer.C:
+					t := proxy.currentBlockTemplate()
+					if t != nil {
+						height := t.Height[common.ZONE_CTX].Int64() - 1
+						prev := height - cfg.BlockTimeWindow
+						if prev < 0 {
+							prev = 0
+						}
+						n := height - prev
+						if n > 0 {
+							block, err := proxy.clients[common.ZONE_CTX].BlockByNumber(context.Background(), big.NewInt(height))
+							if err != nil || block == nil {
+								log.Printf("Error while retrieving block from node: %v", err)
+								proxy.markSick()
+							} else {
+								timestamp := block.Time()
+								prevblock, _ := proxy.clients[common.ZONE_CTX].BlockByNumber(context.Background(), big.NewInt(prev))
+								prevTime := prevblock.Time()
+								blocktime := float64(timestamp-prevTime) / float64(n)
+								err = backend.WriteNodeState(cfg.Name, t.Height[common.ZONE_CTX].Uint64()-1, t.Difficulty, blocktime)
+								if err != nil {
+									log.Printf("Failed to write node state to backend: %v", err)
+									proxy.markSick()
+								} else {
+									proxy.markOk()
+								}
+							}
 						} else {
-							timestamp := block.Time()
-							prevblock, _ := rpc.GetBlockByHeight(prev)
-							prevTime := prevblock.Time()
-							blocktime := float64(timestamp-prevTime) / float64(n)
-							err = backend.WriteNodeState(cfg.Name, t.Height[common.ZONE_CTX].Uint64()-1, t.Difficulty, blocktime)
+							err := backend.WriteNodeState(cfg.Name, t.Height[common.ZONE_CTX].Uint64()-1, t.Difficulty, cfg.AvgBlockTime)
 							if err != nil {
 								log.Printf("Failed to write node state to backend: %v", err)
 								proxy.markSick()
@@ -140,22 +152,54 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 								proxy.markOk()
 							}
 						}
-					} else {
-						err := backend.WriteNodeState(cfg.Name, t.Height[common.ZONE_CTX].Uint64()-1, t.Difficulty, cfg.AvgBlockTime)
-						if err != nil {
-							log.Printf("Failed to write node state to backend: %v", err)
-							proxy.markSick()
-						} else {
-							proxy.markOk()
-						}
 					}
+					stateUpdateTimer.Reset(stateUpdateIntv)
 				}
-				stateUpdateTimer.Reset(stateUpdateIntv)
 			}
-		}
-	}()
+		}()
+	}
 
 	return proxy
+}
+
+// connectToSlice takes in a config and retrieves the Prime, Region, and Zone client
+// that is used for mining in a slice.
+func (s *ProxyServer) connectToSlice() SliceClients {
+	var err error
+	clients := SliceClients{}
+	primeConnected := false
+	regionConnected := false
+	zoneConnected := false
+	for !primeConnected || !regionConnected || !zoneConnected {
+		primeUrl := (*s.upstreams)[common.PRIME_CTX].Url
+		if primeUrl != "" && !primeConnected {
+			clients[common.PRIME_CTX], err = ethclient.Dial(primeUrl)
+			if err != nil {
+				log.Println("Unable to connect to node:", "Prime", primeUrl)
+			} else {
+				primeConnected = true
+			}
+		}
+		regionUrl := (*s.upstreams)[common.REGION_CTX].Url
+		if regionUrl != "" && !regionConnected {
+			clients[common.REGION_CTX], err = ethclient.Dial(regionUrl)
+			if err != nil {
+				log.Println("Unable to connect to node:", "Region", regionUrl)
+			} else {
+				regionConnected = true
+			}
+		}
+		zoneUrl := (*s.upstreams)[common.ZONE_CTX].Url
+		if zoneUrl != "" && !zoneConnected {
+			clients[common.ZONE_CTX], err = ethclient.Dial(zoneUrl)
+			if err != nil {
+				log.Println("Unable to connect to node:", "Zone", zoneUrl)
+			} else {
+				zoneConnected = true
+			}
+		}
+	}
+	return clients
 }
 
 func (s *ProxyServer) Start() {
@@ -166,14 +210,15 @@ func (s *ProxyServer) Start() {
 		Handler:        r,
 		MaxHeaderBytes: s.config.Proxy.LimitHeadersSize,
 	}
+
+	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(context.Background(), s.updateCh); err != nil {
+		log.Fatal("Failed to subscribe to pending header events: ", err)
+	}
+
 	err := srv.ListenAndServe()
 	if err != nil {
 		log.Fatalf("Failed to start proxy: %v", err)
 	}
-}
-
-func (s *ProxyServer) rpc(level int) *rpc.RPCClient {
-	return s.upstreams[level]
 }
 
 func (s *ProxyServer) currentBlockTemplate() *BlockTemplate {
@@ -202,11 +247,10 @@ func (s *ProxyServer) markOk() {
 }
 
 func (s *ProxyServer) fetchBlockTemplate() {
-	rpc := s.rpc(common.ZONE_CTX)
 	t := s.currentBlockTemplate()
-	pendingHeader, err := rpc.GetWork()
+	pendingHeader, err := s.clients[common.ZONE_CTX].GetPendingHeader(context.Background())
 	if err != nil {
-		log.Printf("Error while getting pending header (work) on %s: %s", rpc.Name, err)
+		log.Printf("Error while getting pending header (work) on %s: %s", (*s.upstreams)[common.ZONE_CTX].Name, err)
 		return
 	}
 
@@ -222,7 +266,7 @@ func (s *ProxyServer) fetchBlockTemplate() {
 	}
 
 	s.blockTemplate.Store(&newTemplate)
-	log.Printf("New block to mine on %s at height %d", rpc.Name, pendingHeader.NumberArray())
+	log.Printf("New block to mine on %s at height %d", common.OrderToString(common.ZONE_CTX), pendingHeader.NumberArray())
 
 	go s.broadcastNewJobs()
 }
