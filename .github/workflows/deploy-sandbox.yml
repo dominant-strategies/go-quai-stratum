@@ -1,9 +1,5 @@
 name: Build and Deploy to Sandbox
-on:
-  pull_request:
-    types: [closed]
-    branches:
-    - 'v?[0-9]+.[0-9]+'
+on: workflow_dispatch
 jobs:
   buildDeploySandbox:
     if: github.event.pull_request.merged == true
@@ -15,5 +11,6 @@ jobs:
       GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
     with:
       env: quai-sandbox
-      awk : sed -e "s/pre/rc/g" | read a; if [[ "$a" =~ "rc" ]];then echo $a | awk -F . '{print $1"."$2"."$3"."$4+1}';else echo $a; fi 
+      awk: sed -e "s/pre/rc/g" | awk -F . '{print $1"."$2"."$3"."$4+1}'
       rails: '[[ ! "$VERSION" =~ "pre" ]]'
+
