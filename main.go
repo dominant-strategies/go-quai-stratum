@@ -84,14 +84,6 @@ func main() {
 		log.Printf("Running with %v threads", cfg.Threads)
 	}
 
-	backend = storage.NewRedisClient(&cfg.Redis, cfg.Coin)
-	pong, err := backend.Check()
-	if err != nil {
-		log.Printf("Can't establish connection to backend: %v", err)
-	} else {
-		log.Printf("Backend check reply: %v", pong)
-	}
-
 	if cfg.Proxy.Enabled {
 		go startProxy()
 	}

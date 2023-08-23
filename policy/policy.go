@@ -71,7 +71,6 @@ func Start(cfg *Config, storage *storage.RedisClient) *PolicyServer {
 	s.banChannel = make(chan string, 64)
 	s.stats = make(map[string]*Stats)
 	s.storage = storage
-	s.refreshState()
 
 	timeout := util.MustParseDuration(s.config.ResetInterval)
 	s.timeout = int64(timeout / time.Millisecond)
@@ -88,10 +87,8 @@ func Start(cfg *Config, storage *storage.RedisClient) *PolicyServer {
 		for {
 			select {
 			case <-resetTimer.C:
-				s.resetStats()
 				resetTimer.Reset(resetIntv)
 			case <-refreshTimer.C:
-				s.refreshState()
 				refreshTimer.Reset(refreshIntv)
 			}
 		}
