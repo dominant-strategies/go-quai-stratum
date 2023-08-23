@@ -170,30 +170,45 @@ func (s *ProxyServer) connectToSlice() SliceClients {
 	primeConnected := false
 	regionConnected := false
 	zoneConnected := false
+	primeErrorPrinted := false
+	regionErrorPrinted := false
+	zoneErrorPrinted := false
+
 	for !primeConnected || !regionConnected || !zoneConnected {
 		primeUrl := (*s.upstreams)[common.PRIME_CTX].Url
 		if primeUrl != "" && !primeConnected {
 			clients[common.PRIME_CTX], err = ethclient.Dial(primeUrl)
 			if err != nil {
-				log.Println("Unable to connect to node:", "Prime", primeUrl)
+				if !primeErrorPrinted {
+					log.Println("Unable to connect to node:", "Prime", primeUrl)
+					primeErrorPrinted = true
+				}
 			} else {
 				primeConnected = true
 			}
 		}
+
 		regionUrl := (*s.upstreams)[common.REGION_CTX].Url
 		if regionUrl != "" && !regionConnected {
 			clients[common.REGION_CTX], err = ethclient.Dial(regionUrl)
 			if err != nil {
-				log.Println("Unable to connect to node:", "Region", regionUrl)
+				if !regionErrorPrinted {
+					log.Println("Unable to connect to node:", "Region", regionUrl)
+					regionErrorPrinted = true
+				}
 			} else {
 				regionConnected = true
 			}
 		}
+
 		zoneUrl := (*s.upstreams)[common.ZONE_CTX].Url
 		if zoneUrl != "" && !zoneConnected {
 			clients[common.ZONE_CTX], err = ethclient.Dial(zoneUrl)
 			if err != nil {
-				log.Println("Unable to connect to node:", "Zone", zoneUrl)
+				if !zoneErrorPrinted {
+					log.Println("Unable to connect to node:", "Zone", zoneUrl)
+					zoneErrorPrinted = true
+				}
 			} else {
 				zoneConnected = true
 			}
@@ -201,6 +216,7 @@ func (s *ProxyServer) connectToSlice() SliceClients {
 	}
 	return clients
 }
+
 
 func (s *ProxyServer) Start() {
 	log.Printf("Starting proxy on %v", s.config.Proxy.Listen)
