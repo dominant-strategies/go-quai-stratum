@@ -132,6 +132,7 @@ func (r *RPCClient) doPost(url string, method string, params interface{}) (*Json
 
 	resp, err := r.client.Do(req)
 	if err != nil {
+		log.Printf("Error while posting data to go-quai: %v", err)
 		r.markSick()
 		return nil, err
 	}
@@ -140,10 +141,12 @@ func (r *RPCClient) doPost(url string, method string, params interface{}) (*Json
 	var rpcResp *JsonRPCResponse
 	err = json.NewDecoder(resp.Body).Decode(&rpcResp)
 	if err != nil {
+		log.Printf("Error while decoding response from go-quai: %v", err)
 		r.markSick()
 		return nil, err
 	}
 	if rpcResp.Error != nil {
+		log.Printf("Error from go-quai: %v", rpcResp.Error.Message)
 		r.markSick()
 		return nil, errors.New(rpcResp.Error.Message)
 	}

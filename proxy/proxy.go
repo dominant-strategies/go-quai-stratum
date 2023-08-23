@@ -267,6 +267,7 @@ func (s *ProxyServer) fetchBlockTemplate() {
 
 	s.blockTemplate.Store(&newTemplate)
 	log.Printf("New block to mine on %s at height %d", common.OrderToString(common.ZONE_CTX), pendingHeader.NumberArray())
+	log.Printf("Sealhash: %#x", pendingHeader.SealHash())
 
 	go s.broadcastNewJobs()
 }

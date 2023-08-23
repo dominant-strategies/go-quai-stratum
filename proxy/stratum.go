@@ -42,6 +42,7 @@ func (s *ProxyServer) ListenTCP() {
 	for {
 		conn, err := server.AcceptTCP()
 		if err != nil {
+			log.Printf("Error accepting connection: %v", err)
 			continue
 		}
 		conn.SetKeepAlive(true)
@@ -59,6 +60,7 @@ func (s *ProxyServer) ListenTCP() {
 		go func(cs *Session) {
 			err = s.handleTCPClient(cs)
 			if err != nil {
+				log.Printf("Error handling client: %v", err)
 				s.removeSession(cs)
 				conn.Close()
 			}
@@ -296,6 +298,7 @@ func (s *ProxyServer) broadcastNewJobs() {
 }
 
 func (s *ProxyServer) submitMinedHeader(cs *Session, header *types.Header) error {
+	log.Printf("Miner submitted a block. Blockhash: %#x", header.Hash())
 	_, order, err := s.engine.CalcOrder(header)
 	if err != nil {
 		return fmt.Errorf("rejecting header: %v", err)
