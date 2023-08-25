@@ -114,7 +114,6 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 				proxy.fetchBlockTemplate()
 				refreshTimer.Reset(refreshIntv)
 			case newPendingHeader := <-proxy.updateCh:
-				log.Printf("Length of headerchannel: %d", len(proxy.updateCh))
 				proxy.updateBlockTemplate(newPendingHeader)
 			}
 		}
