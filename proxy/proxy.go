@@ -181,8 +181,17 @@ func (s *ProxyServer) connectToSlice() SliceClients {
 	regionErrorPrinted := false
 	zoneErrorPrinted := false
 
+	primeUrl := (*s.upstreams)[common.PRIME_CTX].Url
+	regionUrl := (*s.upstreams)[common.REGION_CTX].Url
+	if regionUrl == "" {
+		panic("Please specify region port!")
+	}
+	zoneUrl := (*s.upstreams)[common.ZONE_CTX].Url
+	if zoneUrl == "" {
+		panic("Please specify zone port!")
+	}
+
 	for !primeConnected || !regionConnected || !zoneConnected {
-		primeUrl := (*s.upstreams)[common.PRIME_CTX].Url
 		if primeUrl != "" && !primeConnected {
 			clients[common.PRIME_CTX], err = ethclient.Dial(primeUrl)
 			if err != nil {
@@ -192,10 +201,10 @@ func (s *ProxyServer) connectToSlice() SliceClients {
 				}
 			} else {
 				primeConnected = true
+				log.Println("Connected to Prime at: ", primeUrl)
 			}
 		}
 
-		regionUrl := (*s.upstreams)[common.REGION_CTX].Url
 		if regionUrl != "" && !regionConnected {
 			clients[common.REGION_CTX], err = ethclient.Dial(regionUrl)
 			if err != nil {
@@ -205,10 +214,10 @@ func (s *ProxyServer) connectToSlice() SliceClients {
 				}
 			} else {
 				regionConnected = true
+				log.Println("Connected to Region at: ", regionUrl)
 			}
 		}
 
-		zoneUrl := (*s.upstreams)[common.ZONE_CTX].Url
 		if zoneUrl != "" && !zoneConnected {
 			clients[common.ZONE_CTX], err = ethclient.Dial(zoneUrl)
 			if err != nil {
@@ -218,6 +227,7 @@ func (s *ProxyServer) connectToSlice() SliceClients {
 				}
 			} else {
 				zoneConnected = true
+				log.Println("Connected to Zone at: ", zoneUrl)
 			}
 		}
 	}

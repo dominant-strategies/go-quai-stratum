@@ -77,12 +77,10 @@
 		},
 		{
 			"name": "region",
-			"url": "ws://127.0.0.1:8579",
 			"timeout": "10s"
 		},
 		{
 			"name": "zone",
-			"url": "ws://127.0.0.1:8611",
 			"timeout": "10s"
 		}
 	],
