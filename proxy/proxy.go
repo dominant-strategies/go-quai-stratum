@@ -303,6 +303,7 @@ func (s *ProxyServer) updateBlockTemplate(pendingHeader *types.Header) {
 	s.blockTemplate.Store(&newTemplate)
 	log.Printf("New block to mine on %s at height %d", common.OrderToString(common.ZONE_CTX), pendingHeader.NumberArray())
 	log.Printf("Sealhash: %#x", pendingHeader.SealHash())
+	log.Printf("Difficulty: ", pendingHeader.Difficulty())
 
 	go s.broadcastNewJobs()
 }
