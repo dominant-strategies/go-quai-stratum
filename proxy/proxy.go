@@ -111,7 +111,7 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		for {
 			select {
 			case <-refreshTimer.C:
-				proxy.fetchBlockTemplate()
+				// proxy.fetchBlockTemplate()
 				refreshTimer.Reset(refreshIntv)
 			case newPendingHeader := <-proxy.updateCh:
 				proxy.updateBlockTemplate(newPendingHeader)
