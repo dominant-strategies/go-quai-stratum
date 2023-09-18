@@ -91,6 +91,8 @@ github.com/dominant-strategies/go-quai v0.15.0-rc.0 h1:lfrmmSEr8KImBwY719N6LDKwV
 github.com/dominant-strategies/go-quai v0.15.0-rc.0/go.mod h1:LQ/o4Mrx1YV/4TJK2o3fKuJIx811LpirNCk1FrrxkTQ=
 github.com/dominant-strategies/go-quai v0.16.0-rc.0 h1:8S48/08qEESX9K9DVGLvaT2a7cLj8eZ9GeXuGLPyVag=
 github.com/dominant-strategies/go-quai v0.16.0-rc.0/go.mod h1:LQ/o4Mrx1YV/4TJK2o3fKuJIx811LpirNCk1FrrxkTQ=
+github.com/dominant-strategies/go-quai v0.17.0-rc.1 h1:upE5e7vEMyLoIaPgrIKXC7YX4iCfRdDaw+UO480LXN8=
+github.com/dominant-strategies/go-quai v0.17.0-rc.1/go.mod h1:LQ/o4Mrx1YV/4TJK2o3fKuJIx811LpirNCk1FrrxkTQ=
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
 github.com/edsrzf/mmap-go v1.1.0 h1:6EUwBLQ/Mcr1EYLE4Tn1VdW1A4ckqCQWZBw8Hr0kjpQ=
 github.com/edsrzf/mmap-go v1.1.0/go.mod h1:19H/e8pUPLicwkyNgOykDXkJ9F0MHE+Z52B8EIth78Q=
