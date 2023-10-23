@@ -1,211 +1,112 @@
-## Ethereum Classic Stratum Written In Go
-
-### WARNING: This code is currently configured for the Ethereum Classic main network
-
-### Features
-
-**This stratum is being further developed to provide an easy to use stratum for Ethereum Classic miners. This software is functional however an optimised release of the pool frontend is expected soon. Testing and bug submissions are welcome!**
-
-* Support for HTTP and Stratum mining
-* Failover geth instances: geth high availability built in
-* JSON-API for stats
-
-### Building on Linux
-
-Dependencies:
-
-  * go >= 1.16.5
-  * core-geth
-  * redis-server >= 2.8.0
-
-**We highly recommend to use Ubuntu 20.04 LTS.**
-
-First install  [core-geth](https://github.com/etclabscore/core-geth/releases).
-
-Clone & compile:
-
-    git config --global http.https://gopkg.in.followRedirects true
-    git clone https://github.com/dominant-strategies/go-quai-stratum.git
-    cd go-etcstratum
-    make all
-
-Install redis-server.
-
-### Running Stratum
-
-    ./build/bin/go-etcstratum config.json
-
-You can use Ubuntu upstart - check for sample config in <code>upstart.conf</code>.
-
-
-#### Serving API using nginx
-
-Create an upstream for API:
-
-    upstream api {
-        server 127.0.0.1:8080;
-    }
-
-and add this setting after <code>location /</code>:
-
-    location /api {
-        proxy_pass http://api;
-    }
-
-
-### Configuration
-
-Configuration is actually simple, just read it twice and think twice before changing defaults.
-
-**Don't copy config directly from this manual. Use the example config from the package,
-otherwise you will get errors on start because of JSON comments.**
-
-```javascript
-{
-  // Set to the number of CPU cores of your server
-  "threads": 2,
-  // Prefix for keys in redis store
-  "coin": "etc",
-  // Give unique name to each instance
-  "name": "main",
-  // mordor OR classic
-  "network": "classic",
-  "proxy": {
-    "enabled": true,
-
-    // Bind HTTP mining endpoint to this IP:PORT
-    "listen": "0.0.0.0:8888",
-
-    // Allow only this header and body size of HTTP request from miners
-    "limitHeadersSize": 1024,
-    "limitBodySize": 256,
-
-    /* Set to true if you are behind CloudFlare (not recommended) or behind http-reverse
-      proxy to enable IP detection from X-Forwarded-For header.
-      Advanced users only. It's tricky to make it right and secure.
-    */
-    "behindReverseProxy": false,
-
-    // Stratum mining endpoint
-    "stratum": {
-      "enabled": true,
-      // Bind stratum mining socket to this IP:PORT
-      "listen": "0.0.0.0:8008",
-      "timeout": "120s",
-      "maxConn": 8192
-    },
-
-    // Try to get new job from geth in this interval
-    "blockRefreshInterval": "120ms",
-    "stateUpdateInterval": "3s",
-    // Require this share difficulty from miners
-    "difficulty": 2000000000,
-
-    /* Reply error to miner instead of job if redis is unavailable.
-      Should save electricity to miners if pool is sick and they didn't set up failovers.
-    */
-    "healthCheck": true,
-    // Mark pool sick after this number of redis failures.
-    "maxFails": 100,
-    // TTL for workers stats, usually should be equal to large hashrate window from API section
-    "hashrateExpiration": "3h",
-
-    "policy": {
-      "workers": 8,
-      "resetInterval": "60m",
-      "refreshInterval": "1m",
-
-      "banning": {
-        "enabled": false,
-        /* Name of ipset for banning.
-        Check http://ipset.netfilter.org/ documentation.
-        */
-        "ipset": "blacklist",
-        // Remove ban after this amount of time
-        "timeout": 1800,
-        // Percent of invalid shares from all shares to ban miner
-        "invalidPercent": 30,
-        // Check after after miner submitted this number of shares
-        "checkThreshold": 30,
-        // Bad miner after this number of malformed requests
-        "malformedLimit": 5
-      },
-      // Connection rate limit
-      "limits": {
-        "enabled": false,
-        // Number of initial connections
-        "limit": 30,
-        "grace": "5m",
-        // Increase allowed number of connections on each valid share
-        "limitJump": 10
-      }
-    }
-  },
-
-  // Provides JSON data for frontend which is static website
-  "api": {
-    "enabled": true,
-    "listen": "0.0.0.0:8080",
-    // Collect miners stats (hashrate, ...) in this interval
-    "statsCollectInterval": "5s",
-    // Purge stale stats interval
-    "purgeInterval": "10m",
-    // Fast hashrate estimation window for each miner from it's shares
-    "hashrateWindow": "30m",
-    // Long and precise hashrate from shares, 3h is cool, keep it
-    "hashrateLargeWindow": "3h",
-    // Collect stats for shares/diff ratio for this number of blocks
-    "luckWindow": [64, 128, 256],
-    // Max number of payments to display in frontend
-    "payments": 50,
-    // Max numbers of blocks to display in frontend
-    "blocks": 50,
-
-    /* If you are running API node on a different server where this module
-      is reading data from redis writeable slave, you must run an api instance with this option enabled in order to purge hashrate stats from main redis node.
-      Only redis writeable slave will work properly if you are distributing using redis slaves.
-      Very advanced. Usually all modules should share same redis instance.
-    */
-    "purgeOnly": false
-  },
-
-  // Check health of each geth node in this interval
-  "upstreamCheckInterval": "5s",
-
-  /* List of geth nodes to poll for new jobs. Pool will try to get work from
-    first alive one and check in background for failed to back up.
-    Current block template of the pool is always cached in RAM indeed.
-  */
-  "upstream": [
-    {
-      "name": "main",
-      "url": "http://127.0.0.1:8545",
-      "timeout": "10s"
-    },
-    {
-      "name": "backup",
-      "url": "http://127.0.0.2:8545",
-      "timeout": "10s"
-    }
-  ],
-
-  // This is standard redis connection options
-  "redis": {
-    // Where your redis instance is listening for commands
-    "endpoint": "127.0.0.1:6379",
-    "poolSize": 10,
-    "database": 0,
-    "password": ""
-  },
-}
+# Environment Setup
+For the simplest installation process, we recommend installing and running go-quai-stratum on the same computer that you're running go-quai. Running go-quai-stratum on a separate computer is for advanced users as it requires additional networking configuration.
+## Install Dependencies
+To run an instance of go-quai-stratum, you'll need to install a few dependencies. You can install dependencies with your favorite package manager (apt, brew, etc.).
+If you've already installed go-quai, you already have all the necessary dependencies to run go-quai-stratum.
+### Go v1.21.0+
+#### Snap Install (snapd is not installed by default on all Linux Distros):
+```bash
+sudo apt install snapd
 ```
 
-If you are distributing your stratum deployment to several servers or processes,
-create several configs and disable unneeded modules on each server. (Advanced users)
+#### Install go
+```bash
+sudo snap install go --classic
+```
 
-I recommend this deployment strategy:
+#### MacOS Install: 
+```bash
+brew install go
+```
 
-* Mining instance - 1x (it depends, you can run one node for EU, one for US, one for Asia)
-* API instance - 1x
+If you're not on Ubuntu or MacOS, instructions on how to install go directly can be found on the golang installation page.
 
+### Git & Make
+Linux install:
+```bash
+sudo apt install git make
+```
+MacOS install:
+```bash
+brew install git make
+```
+## Install go-quai-stratum
+Now that you've installed the base dependencies, we can go ahead and clone the go-quai-stratum repo. 
 
+To clone the go-quai-stratum repo and navigate to it, run the following commands:
+
+```bash
+git clone https://github.com/dominant-strategies/go-quai-stratum
+cd go-quai-stratum
+```
+
+This command installs the main branch to your local machine. Unless you intend to develop, you must checkout the latest release.
+
+You can find the latest release on the go-quai-stratum releases page.
+
+Then, check out the latest release with:
+```bash
+git checkout put-latest-release-here
+```
+For example (this not the latest release, check the releases page for the latest release number)
+```bash
+git checkout v01.2.3-rc.4
+```
+# Configuration
+To run the Quai stratum proxy, you'll need to do some minor configuration. Start by copying the example configuration file to a local configuration file.
+
+```bash
+cp config/config.example.json config/config.json
+```
+Within the config.json file, you'll be able to configure networking settings and other relevant variables.
+
+# Running the Proxy
+## Build
+Before running the proxy, we need to build the source. You can build via Makefile by running the following command:
+```bash
+make quai-stratum
+```
+## Run
+Now that we've built the source, we can start our proxy We recommend using a process manager program like tmux or screen to run the proxy.
+
+To run the proxy, you'll need to know the web-socket ports utilized by the shard you want to mine within the node. More information on how and why to select shards can be found in our FAQ.
+
+Pass the web-socket ports for the region and zone you'd like to point your proxy at as flags in the run command like so (replace REGION-WS-PORT and ZONE-WS-PORT with the web-socket ports of your desired slice):
+```bash
+./build/bin/quai-stratum --region=REGION-WS-PORT --zone=ZONE-WS-PORT
+```
+Do not open the below Web Socket ports EXCEPT in the specific case where your miner is on a different network than your node/stratum (and even then, be sure to only open the port to the necessary machine). You may be putting your local network security at risk.
+
+Running the proxy will only work for chains your node is validating state for. Global nodes validate state for all chains, whereas slice nodes only validate state for the chains you specify.
+
+The proxy by default listens for miner connections on the 3333 port. You can change the port the proxy listens on by passing it in with the --stratum flag in the run command if you'd like. 
+
+```bash
+./build/bin/quai-stratum --region=REGION-WS-PORT --zone=ZONE-WS-PORT --stratum=LISTENING-PORT
+```
+
+Alternatively, you can simply specify the name of ther region and zone you wish to mine to:
+```bash
+./build/bin/quai-stratum --region=tinos --zone=tinos1 --stratum=LISTENING-PORT
+```
+Changing the proxy listening port is useful for running multiple proxies on a single full node. If you're only mining on a single shard, there is no need to change the listening port.
+
+The proxy should begin streaming logs to the terminal that look similar to below.
+
+```bash
+WARN[0000] One ethash cache must always be in memory requested=0
+2023/09/06 13:47:17 main.go:45: Loading config: 0x14000032970
+2023/09/06 13:47:17 main.go:84: Running with 4 threads
+2023/09/06 13:47:17 policy.go:80: Set policy stats reset every 1h0m0s
+2023/09/06 13:47:17 policy.go:84: Set policy state refresh every 1m0s
+2023/09/06 13:47:17 policy.go:100: Running with 8 policy workers
+WARN[0000] One ethash cache must always be in memory requested=0
+2023/09/06 13:47:17 proxy.go:104: Set block refresh every 120ms
+2023/09/06 13:47:17 stratum.go:38: Stratum listening on 0.0.0.0:3333
+2023/09/06 13:47:17 proxy.go:294: New block to mine on Zone at height [1 1 1]
+2023/09/06 13:47:17 proxy.go:295: Sealhash: 0xc4a31a763af09272a5da7f237978f5e0ead1e409c1e19a034ff8e40e7d727561
+2023/09/06 13:47:17 proxy.go:228: Starting proxy on 0.0.0.0:0
+2023/09/06 13:47:17 stratum.go:280: Broadcasting new job to 0 stratum miners
+```
+To stop the proxy, use CTRL+C in your terminal.
+After configuring and pointing your proxy at a shard, you're now ready to point a GPU miner at it and start mining.
