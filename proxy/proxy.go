@@ -184,11 +184,11 @@ func (s *ProxyServer) connectToSlice() SliceClients {
 	primeUrl := (*s.upstreams)[common.PRIME_CTX].Url
 	regionUrl := (*s.upstreams)[common.REGION_CTX].Url
 	if regionUrl == "" {
-		panic("Please specify region port!")
+		log.Fatal("Please specify region port!")
 	}
 	zoneUrl := (*s.upstreams)[common.ZONE_CTX].Url
 	if zoneUrl == "" {
-		panic("Please specify zone port!")
+		log.Fatal("Please specify zone port!")
 	}
 
 	for !primeConnected || !regionConnected || !zoneConnected {
