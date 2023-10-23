@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
-	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
-	"time"
 
 	"github.com/J-A-M-P-S/structs"
 
@@ -77,7 +75,6 @@ func init() {
 
 func main() {
 	readConfig(&cfg)
-	rand.Seed(time.Now().UnixNano())
 
 	if cfg.Threads > 0 {
 		runtime.GOMAXPROCS(cfg.Threads)
