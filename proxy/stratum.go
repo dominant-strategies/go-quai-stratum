@@ -298,6 +298,10 @@ func (s *ProxyServer) broadcastNewJobs() {
 }
 
 func (s *ProxyServer) submitMinedHeader(cs *Session, header *types.Header) error {
+	powHash, err := s.engine.VerifySeal(header)
+	if err != nil {
+		return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
+	}
 	log.Printf("Miner submitted a block. Blockhash: %#x", header.Hash())
 	_, order, err := s.engine.CalcOrder(header)
 	if err != nil {
