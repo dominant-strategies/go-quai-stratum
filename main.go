@@ -19,6 +19,22 @@ import (
 var cfg proxy.Config
 var backend *storage.RedisClient
 
+var portDefinitions = map[string]string{
+	"prime":   "8547",
+	"cyprus":  "8579",
+	"paxos":   "8581",
+	"hydra":   "8583",
+	"cyprus1": "8611",
+	"cyprus2": "8643",
+	"cyprus3": "8675",
+	"paxos1":  "8613",
+	"paxos2":  "8645",
+	"paxos3":  "8677",
+	"hydra1":  "8615",
+	"hydra2":  "8647",
+	"hydra3":  "8679",
+}
+
 func startProxy() {
 	s := proxy.NewProxy(&cfg, backend)
 	s.Start()
@@ -32,9 +48,9 @@ func startApi() {
 
 func readConfig(cfg *proxy.Config) {
 	configPath := flag.String("config", "config/config.json", "Path to config file")
-	primePort := flag.Int("prime", -1, "Prime upstream port (overrides config)")
-	regionPort := flag.Int("region", -1, "Region upstream port (overrides config)")
-	zonePort := flag.Int("zone", -1, "Zone upstream port (overrides config)")
+	primePort := flag.String("prime", "prime", "Prime upstream port (overrides config)")
+	regionPort := flag.String("region", "", "Region upstream port (overrides config)")
+	zonePort := flag.String("zone", "", "Zone upstream port (overrides config)")
 
 	stratumPort := flag.Int("stratum", -1, "Stratum listen port (overrides config)")
 
@@ -54,18 +70,26 @@ func readConfig(cfg *proxy.Config) {
 	}
 
 	// Perform custom overrides.
-	if primePort != nil && *primePort != -1 {
-		cfg.Upstream[common.PRIME_CTX].Url = "ws://0.0.0.0:" + strconv.Itoa(*primePort)
+	if primePort != nil && *primePort != "prime" {
+		cfg.Upstream[common.PRIME_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*primePort)
 	}
-	if regionPort != nil && *regionPort != -1 {
-		cfg.Upstream[common.REGION_CTX].Url = "ws://0.0.0.0:" + strconv.Itoa(*regionPort)
+	if regionPort != nil && *regionPort != "" {
+		cfg.Upstream[common.REGION_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*regionPort)
 	}
-	if zonePort != nil && *zonePort != -1 {
-		cfg.Upstream[common.ZONE_CTX].Url = "ws://0.0.0.0:" + strconv.Itoa(*zonePort)
+	if zonePort != nil && *zonePort != "" {
+		cfg.Upstream[common.ZONE_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*zonePort)
 	}
 	if *stratumPort != -1 {
 		cfg.Proxy.Stratum.Listen = "0.0.0.0:" + strconv.Itoa(*stratumPort)
 	}
+}
+
+func returnPortHelper(portStr string) string {
+	// Check if already a port number, otherwise look up by name.
+	if _, err := strconv.Atoi(portStr); err != nil {
+		portStr = portDefinitions[portStr]
+	}
+	return portStr
 }
 
 func init() {
