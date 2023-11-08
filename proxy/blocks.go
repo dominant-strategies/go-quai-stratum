@@ -17,6 +17,7 @@ type BlockTemplate struct {
 	Target     *big.Int
 	Difficulty *big.Int
 	Height     []*big.Int
+	JobID      uint
 }
 
 type Block struct {

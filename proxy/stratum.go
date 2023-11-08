@@ -2,19 +2,16 @@ package proxy
 
 import (
 	"bufio"
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"net"
-	"strings"
+	"strconv"
 
 	"github.com/dominant-strategies/go-quai-stratum/util"
 	"github.com/dominant-strategies/go-quai/common"
-	"github.com/dominant-strategies/go-quai/core/types"
 )
 
 const (
@@ -166,7 +163,19 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 	case "mining.submit":
 		var errorResponse Response
 
-		header := s.currentBlockTemplate().Header
+		jobId, err := strconv.ParseUint(req.Params.([]interface{})[0].(string), 16, 0)
+		if err != nil {
+			log.Printf("Error decoding jobID: %v", err)
+			errorResponse = Response{
+				ID: req.Id,
+				Error: map[string]interface{}{
+					"code":    500,
+					"message": "Bad jobID",
+				},
+			}
+			return cs.sendMessage(&errorResponse)
+		}
+
 		nonce, err := hex.DecodeString(req.Params.([]interface{})[1].(string))
 		if err != nil {
 			log.Printf("Error decoding nonce: %v", err)
@@ -180,9 +189,18 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 			return cs.sendMessage(&errorResponse)
 		}
 
-		header.SetNonce(types.BlockNonce(nonce))
-		mixHash, _ := s.engine.ComputePowLight(header)
-		header.SetMixHash(mixHash)
+		header, err := s.verifyMinedHeader(uint(jobId), nonce)
+		if err != nil {
+			log.Printf("Unable to verify header: %v", err)
+			errorResponse = Response{
+				ID: req.Id,
+				Error: map[string]interface{}{
+					"code":    406,
+					"message": "Bad nonce",
+				},
+			}
+			return cs.sendMessage(&errorResponse)
+		}
 
 		err = s.submitMinedHeader(cs, header)
 		if err != nil {
@@ -226,16 +244,17 @@ func (cs *Session) sendTCPError(err error) {
 	cs.sendMessage(&message)
 }
 
-func (cs *Session) pushNewJob(header *types.Header, target *big.Int) error {
+// func (cs *Session) pushNewJob(header *types.Header, target *big.Int) error {
+func (cs *Session) pushNewJob(template *BlockTemplate) error {
 	// Update target to worker.
-	cs.setMining(common.BytesToHash(target.Bytes()))
+	cs.setMining(common.BytesToHash(template.Target.Bytes()))
 
 	notification := Notification{
 		Method: "mining.notify",
 		Params: []string{
-			fmt.Sprintf("%x", header.Number(common.ZONE_CTX)),
-			fmt.Sprintf("%x", header.Number(common.ZONE_CTX)),
-			fmt.Sprintf("%x", header.SealHash()),
+			fmt.Sprintf("%x", template.JobID),
+			fmt.Sprintf("%x", template.Header.Number(common.ZONE_CTX)),
+			fmt.Sprintf("%x", template.Header.SealHash()),
 			"0",
 		},
 	}
@@ -287,7 +306,7 @@ func (s *ProxyServer) broadcastNewJobs() {
 		bcast <- n
 
 		go func(cs *Session) {
-			err := cs.pushNewJob(t.Header, t.Target)
+			err := cs.pushNewJob(t)
 			<-bcast
 			if err != nil {
 				log.Printf("Job transmit error to %v@%v: %v", cs.login, cs.ip, err)
@@ -295,34 +314,6 @@ func (s *ProxyServer) broadcastNewJobs() {
 			}
 		}(m)
 	}
-}
-
-func (s *ProxyServer) submitMinedHeader(cs *Session, header *types.Header) error {
-	powHash, err := s.engine.VerifySeal(header)
-	if err != nil {
-		return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
-	}
-	log.Printf("Miner submitted a block. Blockhash: %#x", header.Hash())
-	_, order, err := s.engine.CalcOrder(header)
-	if err != nil {
-		return fmt.Errorf("rejecting header: %v", err)
-	}
-
-	// Should be synchronous starting with the lowest levels.
-	log.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
-
-	// Send mined header to the relevant go-quai nodes.
-	// Should be synchronous starting with the lowest levels.
-	for i := common.HierarchyDepth - 1; i >= order; i-- {
-		err := s.clients[i].ReceiveMinedHeader(context.Background(), header)
-		if err != nil {
-			// Header was rejected. Refresh workers to try again.
-			cs.pushNewJob(s.currentBlockTemplate().Header, s.currentBlockTemplate().Target)
-			return fmt.Errorf("rejected header: %v", err)
-		}
-	}
-
-	return nil
 }
 
 func (cs *Session) sendMessage(v any) error {

@@ -3,24 +3,27 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/big"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/dominant-strategies/go-quai-stratum/policy"
+	"github.com/dominant-strategies/go-quai-stratum/storage"
+	"github.com/dominant-strategies/go-quai-stratum/util"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/quaiclient/ethclient"
-	"github.com/gorilla/mux"
 
-	"github.com/dominant-strategies/go-quai-stratum/policy"
-	"github.com/dominant-strategies/go-quai-stratum/storage"
-	"github.com/dominant-strategies/go-quai-stratum/util"
+	"github.com/gorilla/mux"
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 const (
@@ -41,6 +44,9 @@ type ProxyServer struct {
 
 	// Channel to receive header updates
 	updateCh chan *types.Header
+
+	// Keep track of previous headers
+	headerCache *lru.LRU[uint, *types.Header]
 
 	// Stratum
 	sessionsMu sync.RWMutex
@@ -86,7 +92,8 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 			nil,
 			false,
 		),
-		updateCh: make(chan *types.Header, c_updateChSize),
+		updateCh:    make(chan *types.Header, c_updateChSize),
+		headerCache: lru.NewLRU[uint, *types.Header](10, nil, 600*time.Second),
 	}
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
@@ -300,9 +307,63 @@ func (s *ProxyServer) updateBlockTemplate(pendingHeader *types.Header) {
 		Height: pendingHeader.NumberArray(),
 	}
 
+	if t == nil {
+		newTemplate.JobID = 0
+	} else {
+		newTemplate.JobID = t.JobID + 1
+	}
+
 	s.blockTemplate.Store(&newTemplate)
+	s.headerCache.Add(newTemplate.JobID, newTemplate.Header)
 	log.Printf("New block to mine on %s at height %d", common.OrderToString(common.ZONE_CTX), pendingHeader.NumberArray())
 	log.Printf("Sealhash: %#x", pendingHeader.SealHash())
 
 	go s.broadcastNewJobs()
+}
+
+func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.Header, error) {
+	header, ok := s.headerCache.Get(jobID)
+	if !ok {
+		return nil, fmt.Errorf("Unable to find header for that jobID: %d", jobID)
+	}
+	header = types.CopyHeader(header)
+
+	header.SetNonce(types.BlockNonce(nonce))
+	mixHash, _ := s.engine.ComputePowLight(header)
+	header.SetMixHash(mixHash)
+
+	if header.NumberU64(common.ZONE_CTX) != s.currentBlockTemplate().Header.NumberU64(common.ZONE_CTX) {
+		log.Printf("Stale header received, block number: %d", header.NumberU64(common.ZONE_CTX))
+	}
+
+	powHash, err := s.engine.VerifySeal(header)
+	log.Printf("Miner submitted a block. Number: %d. Blockhash: %#x", header.NumberU64(common.ZONE_CTX), header.Hash())
+	if err != nil {
+		return nil, fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
+	}
+
+	return header, nil
+}
+
+func (s *ProxyServer) submitMinedHeader(cs *Session, header *types.Header) error {
+
+	_, order, err := s.engine.CalcOrder(header)
+	if err != nil {
+		return fmt.Errorf("rejecting header: %v", err)
+	}
+
+	log.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
+
+	// Send mined header to the relevant go-quai nodes.
+	// Should be synchronous starting with the lowest levels.
+	for i := common.HierarchyDepth - 1; i >= order; i-- {
+		err := s.clients[i].ReceiveMinedHeader(context.Background(), header)
+		if err != nil {
+			// Header was rejected. Refresh workers to try again.
+			cs.pushNewJob(s.currentBlockTemplate())
+			return fmt.Errorf("rejected header: %v", err)
+		}
+	}
+
+	return nil
 }

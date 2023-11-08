@@ -7,6 +7,7 @@ require (
 	github.com/J-A-M-P-S/structs v1.1.0
 	github.com/dominant-strategies/go-quai v0.22.0
 	github.com/gorilla/mux v1.8.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/robfig/cron v1.2.0
 	gopkg.in/redis.v3 v3.6.4
 )
