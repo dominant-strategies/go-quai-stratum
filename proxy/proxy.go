@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"math/rand"
 	"net"
 	"net/http"
 	"strings"
@@ -41,6 +42,7 @@ type ProxyServer struct {
 	hashrateExpiration time.Duration
 	failsCount         int64
 	engine             consensus.Engine
+	rng                *rand.Rand
 
 	// Channel to receive header updates
 	updateCh chan *types.Header
@@ -98,6 +100,8 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
 	proxy.clients = proxy.connectToSlice()
+
+	proxy.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	if cfg.Proxy.Stratum.Enabled {
 		proxy.sessions = make(map[*Session]struct{})
