@@ -64,7 +64,7 @@ Within the config.json file, you'll be able to configure networking settings and
 ## Build
 Before running the proxy, we need to build the source. You can build via Makefile by running the following command:
 ```bash
-make quai-stratum
+make go-quai-stratum
 ```
 ## Run
 Now that we've built the source, we can start our proxy We recommend using a process manager program like tmux or screen to run the proxy.

@@ -2,7 +2,7 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: all test clean quai-stratum
+.PHONY: all test clean go-quai-stratum
 
 GOBIN = ./build/bin
 GOGET = env GO111MODULE=on go get
@@ -20,7 +20,7 @@ clean:
 	rm -fr build/_workspace/pkg/ $(GOBIN)/*
 
 debug:
-	$(GOBUILD) -gcflags="all=-N -l" -o ./build/bin/quai-stratum ./main.go
+	$(GOBUILD) -gcflags="all=-N -l" -o ./build/bin/go-quai-stratum ./main.go
 
-quai-stratum:
-	$(GOBUILD) -o ./build/bin/quai-stratum ./main.go
+go-quai-stratum:
+	$(GOBUILD) -o ./build/bin/go-quai-stratum ./main.go
