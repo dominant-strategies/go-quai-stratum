@@ -74,9 +74,11 @@ func readConfig(cfg *proxy.Config) {
 		cfg.Upstream[common.PRIME_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*primePort)
 	}
 	if regionPort != nil && *regionPort != "" {
+		cfg.Upstream[common.REGION_CTX].Name = *regionPort
 		cfg.Upstream[common.REGION_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*regionPort)
 	}
 	if zonePort != nil && *zonePort != "" {
+		cfg.Upstream[common.ZONE_CTX].Name = *zonePort
 		cfg.Upstream[common.ZONE_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*zonePort)
 	}
 	if *stratumPort != -1 {

@@ -71,16 +71,20 @@
 	"upstreamCheckInterval": "5s",
 	"upstream": [
 		{
-			"name": "prime",
+			"context": "prime",
 			"url": "ws://127.0.0.1:8547",
 			"timeout": "10s"
 		},
 		{
-			"name": "region",
+			"context": "region",
+			"name": "",
+			"url": "",
 			"timeout": "10s"
 		},
 		{
-			"name": "zone",
+			"context": "zone",
+			"name": "",
+			"url": "",
 			"timeout": "10s"
 		}
 	],

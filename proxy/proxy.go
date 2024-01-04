@@ -320,7 +320,7 @@ func (s *ProxyServer) updateBlockTemplate(pendingHeader *types.Header) {
 
 	s.blockTemplate.Store(&newTemplate)
 	s.headerCache.Add(newTemplate.JobID, newTemplate.Header)
-	log.Printf("New block to mine on %s at height %d", common.OrderToString(common.ZONE_CTX), pendingHeader.NumberArray())
+	log.Printf("New block to mine on %s at height %d", s.config.Upstream[common.ZONE_CTX].Name, pendingHeader.NumberArray())
 
 	difficultyMh := strconv.FormatUint(newTemplate.Header.Difficulty().Uint64() / 1000000, 10)
 	if len(difficultyMh) >= 3 {
@@ -334,7 +334,7 @@ func (s *ProxyServer) updateBlockTemplate(pendingHeader *types.Header) {
 func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.Header, error) {
 	header, ok := s.headerCache.Get(jobID)
 	if !ok {
-		return nil, fmt.Errorf("Unable to find header for that jobID: %d", jobID)
+		return nil, fmt.Errorf("unable to find header for that jobID: %d", jobID)
 	}
 	header = types.CopyHeader(header)
 
@@ -347,7 +347,7 @@ func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.Header
 	}
 
 	powHash, err := s.engine.VerifySeal(header)
-	log.Printf("Miner submitted a block. Number: %d. Blockhash: %#x", header.NumberU64(common.ZONE_CTX), header.Hash())
+	log.Printf("Miner submitted a block. Location: %s. Number: %d. Blockhash: %#x", s.config.Upstream[common.ZONE_CTX].Name, header.NumberU64(common.ZONE_CTX), header.Hash())
 	if err != nil {
 		return nil, fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
 	}
