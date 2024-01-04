@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -320,6 +321,11 @@ func (s *ProxyServer) updateBlockTemplate(pendingHeader *types.Header) {
 	s.blockTemplate.Store(&newTemplate)
 	s.headerCache.Add(newTemplate.JobID, newTemplate.Header)
 	log.Printf("New block to mine on %s at height %d", common.OrderToString(common.ZONE_CTX), pendingHeader.NumberArray())
+
+	difficultyMh := strconv.FormatUint(newTemplate.Header.Difficulty().Uint64() / 1000000, 10)
+	if len(difficultyMh) >= 3 {
+		log.Printf("Difficulty: %s.%s Gh", difficultyMh[:len(difficultyMh)-3], difficultyMh[len(difficultyMh)-3:])
+	}
 	log.Printf("Sealhash: %#x", pendingHeader.SealHash())
 
 	go s.broadcastNewJobs()
