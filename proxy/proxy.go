@@ -104,11 +104,6 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 
 	proxy.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	if cfg.Proxy.Stratum.Enabled {
-		proxy.sessions = make(map[*Session]struct{})
-		go proxy.ListenTCP()
-	}
-
 	proxy.hashrateExpiration = util.MustParseDuration(cfg.Proxy.HashrateExpiration)
 
 	refreshIntv := util.MustParseDuration(cfg.Proxy.BlockRefreshInterval)
@@ -118,6 +113,11 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	stateUpdateIntv := util.MustParseDuration(cfg.Proxy.StateUpdateInterval)
 	stateUpdateTimer := time.NewTimer(stateUpdateIntv)
 	proxy.fetchBlockTemplate()
+
+	if cfg.Proxy.Stratum.Enabled {
+		proxy.sessions = make(map[*Session]struct{})
+		go proxy.ListenTCP()
+	}
 
 	go func() {
 		for {
