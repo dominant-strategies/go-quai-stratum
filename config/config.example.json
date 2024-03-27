@@ -72,7 +72,7 @@
 	"upstream": [
 		{
 			"context": "prime",
-			"url": "ws://127.0.0.1:8547",
+			"url": "ws://127.0.0.1:8001",
 			"timeout": "10s"
 		},
 		{
