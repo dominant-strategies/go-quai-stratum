@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"log"
 	"os"
 	"runtime"
 	"strconv"
@@ -13,28 +12,15 @@ import (
 	"github.com/dominant-strategies/go-quai-stratum/api"
 	"github.com/dominant-strategies/go-quai-stratum/proxy"
 	"github.com/dominant-strategies/go-quai-stratum/storage"
+	"github.com/dominant-strategies/go-quai-stratum/util"
+
+	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/log"
 )
 
 var cfg proxy.Config
 var backend *storage.RedisClient
-
-var portDefinitions = map[string]string{
-	"prime":   "8547",
-	"cyprus":  "8579",
-	"paxos":   "8581",
-	"hydra":   "8583",
-	"cyprus1": "8611",
-	"cyprus2": "8643",
-	"cyprus3": "8675",
-	"paxos1":  "8613",
-	"paxos2":  "8645",
-	"paxos3":  "8677",
-	"hydra1":  "8615",
-	"hydra2":  "8647",
-	"hydra3":  "8679",
-}
 
 func startProxy() {
 	s := proxy.NewProxy(&cfg, backend)
@@ -89,10 +75,15 @@ func readConfig(cfg *proxy.Config) {
 	}
 }
 
-func returnPortHelper(portStr string) string {
+func returnPortHelper(locName string) string {
+	var portStr string
 	// Check if already a port number, otherwise look up by name.
-	if _, err := strconv.Atoi(portStr); err != nil {
-		portStr = portDefinitions[portStr]
+	if _, err := strconv.Atoi(locName); err != nil {
+		loc, err := util.LocationFromName(locName)
+		if err != nil {
+			log.Global.WithField("err", err).Warn("Unable to parse location")
+		}
+		portStr = strconv.Itoa(utils.GetWSPort(loc))
 	}
 	return portStr
 }
