@@ -14,6 +14,7 @@ import (
 	"github.com/dominant-strategies/go-quai-stratum/proxy"
 	"github.com/dominant-strategies/go-quai-stratum/storage"
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/log"
 )
 
 var cfg proxy.Config
@@ -56,17 +57,19 @@ func readConfig(cfg *proxy.Config) {
 
 	flag.Parse()
 
-	log.Printf("Loading config: %v", configPath)
+	log.Global.WithField(
+		"path", *configPath,
+	).Info("Loading config")
 
 	// Read config file.
 	configFile, err := os.Open(*configPath)
 	if err != nil {
-		log.Fatal("File error: ", err.Error())
+		log.Global.Fatal("File error: ", err.Error())
 	}
 	defer configFile.Close()
 	jsonParser := json.NewDecoder(configFile)
 	if err := jsonParser.Decode(&cfg); err != nil {
-		log.Fatal("Config error: ", err.Error())
+		log.Global.Fatal("Config error: ", err.Error())
 	}
 
 	// Perform custom overrides.
@@ -95,8 +98,6 @@ func returnPortHelper(portStr string) string {
 }
 
 func init() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.SetOutput(os.Stdout)
 }
 
 func main() {
@@ -104,7 +105,9 @@ func main() {
 
 	if cfg.Threads > 0 {
 		runtime.GOMAXPROCS(cfg.Threads)
-		log.Printf("Running with %v threads", cfg.Threads)
+		log.Global.WithField(
+			"threads", cfg.Threads,
+		).Debug("Threads running")
 	}
 
 	if cfg.Proxy.Enabled {
