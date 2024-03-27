@@ -1,10 +1,12 @@
 package util
 
 import (
+	"errors"
 	"math/big"
 	"regexp"
 	"strconv"
 	"time"
+	"unicode"
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
@@ -101,4 +103,52 @@ func DiffToTarget(diff float64) (target *big.Int) {
 func DiffFloatToDiffInt(diffFloat float64) (diffInt *big.Int) {
 	target := DiffToTarget(diffFloat)
 	return new(big.Int).Div(pow256, target)
+}
+
+func LocationFromName(name string) (common.Location, error) {
+	var loc common.Location
+	var region string
+	var zone string
+
+	if name == "prime" {
+		return loc, nil
+	}
+
+	for i := 0; i < len(name); i++ {
+		if unicode.IsDigit(rune(name[i])) {
+			region = name[:i]
+			zone = name[i:]
+			break
+		}
+	}
+
+	if region == "" {
+		region = name // No zone specified
+	}
+
+	switch region {
+	case "cyprus":
+		loc = append(loc, 0)
+	case "paxos":
+		loc = append(loc, 1)
+	case "hydra":
+		loc = append(loc, 2)
+	default:
+		err := errors.New("unknown region")
+		return nil, err
+	}
+
+	if zone != "" {
+		zone, err := strconv.Atoi(zone)
+		if err == nil {
+			loc = append(loc, byte(zone-1)) // Adjust because zones are 1-indexed in names
+		} else {
+			err = errors.New("invalid zone number")
+			return nil, err
+		}
+	} else {
+		// There was no zone specified, so return the region
+		return loc, nil
+	}
+	return loc, nil
 }
