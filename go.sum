@@ -133,8 +133,8 @@ github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
 github.com/dominant-strategies/bn256 v0.0.0-20220930122411-fbf930a7493d h1:hkL13khTTS48QfWmjRFWpuzhOqu6S0cjpJOzPoBEDb4=
 github.com/dominant-strategies/bn256 v0.0.0-20220930122411-fbf930a7493d/go.mod h1:nvtPJPChairu4o4iX2XGrstOFpLaAgNYhrUCl5bSng4=
-github.com/dominant-strategies/go-quai v0.13.0-pre.0.0.20240327163630-0c953cc4c6d2 h1:48BUBji1/sTjU3KQm5KwdUdbAu47h+I+soOcna65ZC8=
-github.com/dominant-strategies/go-quai v0.13.0-pre.0.0.20240327163630-0c953cc4c6d2/go.mod h1:jGBm267xHJKv8X7jtBdT7efc/tt+SsptBWNdVFxClL8=
+github.com/dominant-strategies/go-quai v0.0.0-20240411193822-1ce39f1b5c1c h1:3Pl1S8obbNEZQFt+KXU14wa6la+WK7T8OOz4BG1nGys=
+github.com/dominant-strategies/go-quai v0.0.0-20240411193822-1ce39f1b5c1c/go.mod h1:jGBm267xHJKv8X7jtBdT7efc/tt+SsptBWNdVFxClL8=
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
 github.com/edsrzf/mmap-go v1.1.0 h1:6EUwBLQ/Mcr1EYLE4Tn1VdW1A4ckqCQWZBw8Hr0kjpQ=
 github.com/edsrzf/mmap-go v1.1.0/go.mod h1:19H/e8pUPLicwkyNgOykDXkJ9F0MHE+Z52B8EIth78Q=

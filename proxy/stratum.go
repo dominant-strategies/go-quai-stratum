@@ -258,8 +258,8 @@ func (cs *Session) pushNewJob(template *BlockTemplate) error {
 		Method: "mining.notify",
 		Params: []string{
 			fmt.Sprintf("%x", template.JobID),
-			fmt.Sprintf("%x", template.Header.Number(common.ZONE_CTX)),
-			fmt.Sprintf("%x", template.Header.SealHash()),
+			fmt.Sprintf("%x", template.WorkObject.Number(common.ZONE_CTX)),
+			fmt.Sprintf("%x", template.WorkObject.SealHash()),
 			"0",
 		},
 	}
@@ -293,7 +293,7 @@ func (cs *Session) setMining(target common.Hash) error {
 
 func (s *ProxyServer) broadcastNewJobs() {
 	t := s.currentBlockTemplate()
-	if t == nil || t.Header == nil || t.Target == nil || s.isSick() {
+	if t == nil || t.WorkObject == nil || t.Target == nil || s.isSick() {
 		return
 	}
 

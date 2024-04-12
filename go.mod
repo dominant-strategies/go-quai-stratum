@@ -5,12 +5,14 @@ go 1.22
 require (
 	github.com/INFURA/go-ethlibs v0.0.0-20230222175239-ea21e114f25c
 	github.com/J-A-M-P-S/structs v1.1.0
-	github.com/dominant-strategies/go-quai v0.13.0-pre.0.0.20240327163630-0c953cc4c6d2
+	github.com/dominant-strategies/go-quai v0.28.2
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/robfig/cron v1.2.0
 	gopkg.in/redis.v3 v3.6.4
 )
+
+replace github.com/dominant-strategies/go-quai => github.com/dominant-strategies/go-quai v0.0.0-20240411193822-1ce39f1b5c1c
 
 require (
 	github.com/BurntSushi/toml v1.3.2 // indirect
