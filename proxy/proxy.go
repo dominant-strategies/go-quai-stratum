@@ -132,53 +132,6 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		}
 	}()
 
-	if cfg.Redis.Enabled {
-		go func() {
-			for {
-				select {
-				case <-stateUpdateTimer.C:
-					t := proxy.currentBlockTemplate()
-					if t != nil {
-						height := t.Height[common.ZONE_CTX].Int64() - 1
-						prev := height - cfg.BlockTimeWindow
-						if prev < 0 {
-							prev = 0
-						}
-						n := height - prev
-						if n > 0 {
-							block, err := proxy.clients[common.ZONE_CTX].BlockByNumber(context.Background(), big.NewInt(height))
-							if err != nil || block == nil {
-								log.Global.Printf("Error while retrieving block from node: %v", err)
-								proxy.markSick()
-							} else {
-								timestamp := block.Time()
-								prevblock, _ := proxy.clients[common.ZONE_CTX].BlockByNumber(context.Background(), big.NewInt(prev))
-								prevTime := prevblock.Time()
-								blocktime := float64(timestamp-prevTime) / float64(n)
-								err = backend.WriteNodeState(cfg.Name, t.Height[common.ZONE_CTX].Uint64()-1, t.Difficulty, blocktime)
-								if err != nil {
-									log.Global.Printf("Failed to write node state to backend: %v", err)
-									proxy.markSick()
-								} else {
-									proxy.markOk()
-								}
-							}
-						} else {
-							err := backend.WriteNodeState(cfg.Name, t.Height[common.ZONE_CTX].Uint64()-1, t.Difficulty, cfg.AvgBlockTime)
-							if err != nil {
-								log.Global.Printf("Failed to write node state to backend: %v", err)
-								proxy.markSick()
-							} else {
-								proxy.markOk()
-							}
-						}
-					}
-					stateUpdateTimer.Reset(stateUpdateIntv)
-				}
-			}
-		}()
-	}
-
 	return proxy
 }
 
