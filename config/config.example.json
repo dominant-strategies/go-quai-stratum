@@ -87,13 +87,5 @@
 			"url": "",
 			"timeout": "10s"
 		}
-	],
-
-	"redis": {
-		"enabled": false,
-		"endpoint": "127.0.0.1:6379",
-		"poolSize": 10,
-		"database": 0,
-		"password": ""
-	}
+	]
 }

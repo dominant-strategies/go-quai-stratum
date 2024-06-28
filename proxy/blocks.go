@@ -13,7 +13,7 @@ import (
 
 type BlockTemplate struct {
 	sync.RWMutex
-	Header     *types.Header
+	WorkObject *types.WorkObject
 	Target     *big.Int
 	Difficulty *big.Int
 	Height     []*big.Int
