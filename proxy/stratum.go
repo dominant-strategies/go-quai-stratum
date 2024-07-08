@@ -12,6 +12,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai-stratum/util"
 	"github.com/dominant-strategies/go-quai/common"
+	"github.com/dominant-strategies/go-quai/consensus/progpow"
 )
 
 const (
@@ -252,13 +253,13 @@ func (cs *Session) sendTCPError(err error) {
 // func (cs *Session) pushNewJob(header *types.Header, target *big.Int) error {
 func (cs *Session) pushNewJob(template *BlockTemplate) error {
 	// Update target to worker.
-	cs.setMining(common.BytesToHash(template.Target.Bytes()))
+	cs.setMining(template)
 
 	notification := Notification{
 		Method: "mining.notify",
 		Params: []string{
 			fmt.Sprintf("%x", template.JobID),
-			fmt.Sprintf("%x", template.WorkObject.Number(common.ZONE_CTX)),
+			fmt.Sprintf("%x", template.WorkObject.PrimeTerminusNumber().Uint64()),
 			fmt.Sprintf("%x", template.WorkObject.SealHash()),
 			"0",
 		},
@@ -278,12 +279,13 @@ func (s *ProxyServer) removeSession(cs *Session) {
 	delete(s.sessions, cs)
 }
 
-func (cs *Session) setMining(target common.Hash) error {
+// func (cs *Session) setMining(target common.Hash) error {
+func (cs *Session) setMining(template *BlockTemplate) error {
 	notification := Notification{
 		Method: "mining.set",
 		Params: map[string]interface{}{
-			"epoch":      "",
-			"target":     target.Hex()[2:],
+			"epoch":      fmt.Sprintf("%x", int(template.WorkObject.PrimeTerminusNumber().Uint64()/progpow.C_epochLength)),
+			"target":     common.BytesToHash(template.Target.Bytes()).Hex()[2:],
 			"algo":       "ethash",
 			"extranonce": cs.Extranonce,
 		},

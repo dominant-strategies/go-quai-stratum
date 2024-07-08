@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 )
 
@@ -41,7 +40,7 @@ func (s *ProxyServer) handleLoginRPC(cs *Session, req Request) error {
 
 	if s.config.Proxy.Stratum.Enabled {
 		// Provide the difficulty to the client. Must be completed before `mining.notify`.
-		cs.setMining(common.BytesToHash(s.currentBlockTemplate().Target.Bytes()))
+		cs.setMining(s.currentBlockTemplate())
 		go s.broadcastNewJobs()
 	}
 
