@@ -205,6 +205,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 					"message": "Bad nonce",
 				},
 			}
+			cs.setMining(s.currentBlockTemplate())
 			return cs.sendMessage(&errorResponse)
 		}
 
