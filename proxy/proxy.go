@@ -96,7 +96,7 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 			log.Global,
 		),
 		updateCh: make(chan *types.WorkObject, c_updateChSize),
-		woCache:  lru.NewLRU[uint, *types.WorkObject](10, nil, 600*time.Second),
+		woCache:  lru.NewLRU[uint, *types.WorkObject](10, nil, 0),
 	}
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
