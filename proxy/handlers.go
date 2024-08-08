@@ -50,7 +50,7 @@ func (s *ProxyServer) handleLoginRPC(cs *Session, req Request) error {
 // Returns the cached header to clients.
 func (s *ProxyServer) handleGetWorkRPC(cs *Session) (*types.WorkObjectHeader, *ErrorReply) {
 	t := s.currentBlockTemplate()
-	if t == nil || t.WorkObject == nil || t.WorkObject.WorkObjectHeader == nil || s.isSick() {
+	if t == nil || t.WorkObject == nil || t.WorkObject.WorkObjectHeader() == nil || s.isSick() {
 		return nil, &ErrorReply{Code: 0, Message: "Work not ready"}
 	}
 	return t.WorkObject.WorkObjectHeader(), nil
