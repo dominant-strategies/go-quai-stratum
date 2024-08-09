@@ -308,7 +308,7 @@ func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.WorkOb
 
 func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) error {
 
-	_, order, err := s.engine.CalcOrder(wObject)
+	order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(context.Background(), wObject)
 	if err != nil {
 		return fmt.Errorf("rejecting header: %v", err)
 	}
