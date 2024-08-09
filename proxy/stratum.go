@@ -304,7 +304,7 @@ func (s *ProxyServer) broadcastNewJobs() {
 	defer s.sessionsMu.RUnlock()
 
 	count := len(s.sessions)
-	log.Printf("Broadcasting new job to %v stratum miners", count)
+	log.Printf("Broadcasting block %d to %d stratum miners", t.WorkObject.PrimeTerminusNumber().Uint64(), count)
 
 	bcast := make(chan int, 1024)
 	n := 0
