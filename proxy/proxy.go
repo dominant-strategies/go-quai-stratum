@@ -22,6 +22,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/quaiclient"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/gorilla/mux"
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
@@ -45,7 +46,7 @@ type ProxyServer struct {
 	rng                *rand.Rand
 
 	// Channel to receive header updates
-	updateCh chan *types.WorkObject
+	updateCh chan []byte
 
 	// Keep track of previous headers
 	woCache *lru.LRU[uint, *types.WorkObject]
@@ -95,7 +96,7 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 			false,
 			log.Global,
 		),
-		updateCh: make(chan *types.WorkObject, c_updateChSize),
+		updateCh: make(chan []byte, 5*1024),
 		woCache:  lru.NewLRU[uint, *types.WorkObject](10, nil, 0),
 	}
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
@@ -124,7 +125,29 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 				proxy.fetchBlockTemplate()
 				refreshTimer.Reset(refreshIntv)
 			case newPendingHeader := <-proxy.updateCh:
-				proxy.updateBlockTemplate(newPendingHeader)
+				if len(newPendingHeader) > 0 {
+					protoWo := &types.ProtoWorkObject{}
+					err := proto.Unmarshal(newPendingHeader, protoWo)
+					if err != nil {
+						log.Global.Error("Error unmarshalling new pending header", "err", err)
+						continue
+					}
+					pendingHeader := &types.WorkObject{}
+					location, err := util.LocationFromName((*proxy.upstreams)[common.ZONE_CTX].Name)
+					if err != nil {
+						log.Global.WithFields(log.Fields{
+							"locationName": (*proxy.upstreams)[common.ZONE_CTX].Name,
+							"err":          err,
+						}).Error("Error getting location from name")
+						continue
+					}
+					err = pendingHeader.ProtoDecode(protoWo, location, types.PEtxObject)
+					if err != nil {
+						log.Global.Error("Error decoding new pending header", "err", err)
+						continue
+					}
+					proxy.updateBlockTemplate(pendingHeader)
+				}
 			}
 		}
 	}()
