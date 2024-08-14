@@ -73,7 +73,7 @@ To run the proxy, you'll need to know the web-socket ports utilized by the shard
 
 Pass the web-socket ports for the region and zone you'd like to point your proxy at as flags in the run command like so (replace REGION-WS-PORT and ZONE-WS-PORT with the web-socket ports of your desired slice):
 ```bash
-./build/bin/quai-stratum --region=REGION-WS-PORT --zone=ZONE-WS-PORT
+./build/bin/go-quai-stratum --region=REGION-WS-PORT --zone=ZONE-WS-PORT
 ```
 Do not open the below Web Socket ports EXCEPT in the specific case where your miner is on a different network than your node/stratum (and even then, be sure to only open the port to the necessary machine). You may be putting your local network security at risk.
 
@@ -82,12 +82,12 @@ Running the proxy will only work for chains your node is validating state for. G
 The proxy by default listens for miner connections on the 3333 port. You can change the port the proxy listens on by passing it in with the --stratum flag in the run command if you'd like. 
 
 ```bash
-./build/bin/quai-stratum --region=REGION-WS-PORT --zone=ZONE-WS-PORT --stratum=LISTENING-PORT
+./build/bin/go-quai-stratum --region=REGION-WS-PORT --zone=ZONE-WS-PORT --stratum=LISTENING-PORT
 ```
 
 Alternatively, you can simply specify the name of ther region and zone you wish to mine to:
 ```bash
-./build/bin/quai-stratum --region=tinos --zone=tinos1 --stratum=LISTENING-PORT
+./build/bin/go-quai-stratum --region=tinos --zone=tinos1 --stratum=LISTENING-PORT
 ```
 Changing the proxy listening port is useful for running multiple proxies on a single full node. If you're only mining on a single shard, there is no need to change the listening port.
 
