@@ -211,16 +211,11 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 
 		err = s.submitMinedHeader(cs, header)
 		if err != nil {
-			log.Printf("Error submitting header: %v", err)
-			errorResponse = Response{
-				ID: req.Id,
-				Error: map[string]interface{}{
-					"code":    406,
-					"message": "Bad nonce",
-				},
-			}
-			return cs.sendMessage(&errorResponse)
+			log.Printf("Miner submitted a workShare")
+		} else {
+			log.Printf("Miner submitted a block. Location: %s. Number: %d. Blockhash: %#x", s.config.Upstream[common.ZONE_CTX].Name, header.NumberU64(common.ZONE_CTX), header.Hash())
 		}
+
 		successResponse := Response{
 			ID: req.Id,
 		}
@@ -304,7 +299,7 @@ func (s *ProxyServer) broadcastNewJobs() {
 	defer s.sessionsMu.RUnlock()
 
 	count := len(s.sessions)
-	log.Printf("Broadcasting block %d to %d stratum miners", t.WorkObject.PrimeTerminusNumber().Uint64(), count)
+	log.Printf("Broadcasting block %d to %d stratum miners", t.WorkObject.NumberU64(common.ZONE_CTX), count)
 
 	bcast := make(chan int, 1024)
 	n := 0

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"net"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 	"google.golang.org/protobuf/proto"
 
@@ -280,9 +282,15 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 	if t != nil && t.WorkObject != nil && t.WorkObject.WorkObjectHeader() != nil && t.WorkObject.WorkObjectHeader().SealHash() == pendingWo.SealHash() {
 		return
 	}
+
+	threshold, err := consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), params.WorkSharesThresholdDiff)
+	if err != nil {
+		log.Global.WithField("err", err).Error("Error calculating the target")
+		return
+	}
 	newTemplate := BlockTemplate{
 		WorkObject: pendingWo,
-		Target:     consensus.DifficultyToTarget(pendingWo.Difficulty()),
+		Target:     threshold,
 		Height:     pendingWo.NumberArray(),
 	}
 
@@ -296,9 +304,9 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 	s.woCache.Add(newTemplate.JobID, newTemplate.WorkObject)
 	log.Global.Printf("New block to mine on %s at height %d", s.config.Upstream[common.ZONE_CTX].Name, pendingWo.NumberArray())
 
-	difficultyMh := strconv.FormatUint(newTemplate.WorkObject.Difficulty().Uint64()/1000000, 10)
+	difficultyMh := strconv.FormatUint(new(big.Int).Div(consensus.TargetToDifficulty(newTemplate.Target), big.NewInt(1000)).Uint64(), 10)
 	if len(difficultyMh) >= 3 {
-		log.Global.Printf("Difficulty: %s.%s Gh", difficultyMh[:len(difficultyMh)-3], difficultyMh[len(difficultyMh)-3:])
+		log.Global.Printf("Difficulty: %s.%s Mh", difficultyMh[:len(difficultyMh)-3], difficultyMh[len(difficultyMh)-3:])
 	}
 	log.Global.Printf("Sealhash: %#x", pendingWo.SealHash())
 
@@ -320,16 +328,20 @@ func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.WorkOb
 		log.Global.Printf("Stale header received, block number: %d", wObject.NumberU64(common.ZONE_CTX))
 	}
 
-	powHash, err := s.engine.VerifySeal(wObject.WorkObjectHeader())
-	log.Global.Printf("Miner submitted a block. Location: %s. Number: %d. Blockhash: %#x", s.config.Upstream[common.ZONE_CTX].Name, wObject.NumberU64(common.ZONE_CTX), wObject.Hash())
+	err := s.clients[common.ZONE_CTX].ReceiveWorkShare(context.Background(), wObject.WorkObjectHeader())
 	if err != nil {
-		return nil, fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
+		return nil, err
 	}
 
 	return wObject, nil
 }
 
 func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) error {
+
+	powHash, err := s.engine.VerifySeal(wObject.WorkObjectHeader())
+	if err != nil {
+		return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
+	}
 
 	order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(context.Background(), wObject)
 	if err != nil {
