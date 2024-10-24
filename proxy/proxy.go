@@ -306,7 +306,7 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 
 	difficultyMh := strconv.FormatUint(new(big.Int).Div(consensus.TargetToDifficulty(newTemplate.Target), big.NewInt(1000)).Uint64(), 10)
 	if len(difficultyMh) >= 3 {
-		log.Global.Printf("Difficulty: %s.%s Mh", difficultyMh[:len(difficultyMh)-3], difficultyMh[len(difficultyMh)-3:])
+		log.Global.Printf("Workshare difficulty: %s.%s Mh", difficultyMh[:len(difficultyMh)-3], difficultyMh[len(difficultyMh)-3:])
 	}
 	log.Global.Printf("Sealhash: %#x", pendingWo.SealHash())
 
