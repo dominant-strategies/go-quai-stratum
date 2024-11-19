@@ -7,7 +7,7 @@ toolchain go1.23.2
 require (
 	github.com/INFURA/go-ethlibs v0.0.0-20230222175239-ea21e114f25c
 	github.com/J-A-M-P-S/structs v1.1.0
-	github.com/dominant-strategies/go-quai v0.36.0
+	github.com/dominant-strategies/go-quai v0.40.0
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/robfig/cron v1.2.0

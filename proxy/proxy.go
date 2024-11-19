@@ -283,7 +283,7 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 		return
 	}
 
-	threshold, err := consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), params.WorkSharesThresholdDiff)
+	threshold, err := consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), getWorkshareThresholdDiff(int(pendingWo.NumberU64(common.ZONE_CTX))))
 	if err != nil {
 		log.Global.WithField("err", err).Error("Error calculating the target")
 		return
@@ -362,4 +362,12 @@ func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) 
 	}
 
 	return nil
+}
+
+func getWorkshareThresholdDiff(blockNumber int) int {
+	if blockNumber < params.GoldenAgeForkNumberV1 {
+		return params.OldWorkSharesThresholdDiff
+	} else {
+		return params.NewWorkSharesThresholdDiff
+	}
 }
