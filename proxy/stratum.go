@@ -55,7 +55,7 @@ func (s *ProxyServer) ListenTCP() {
 		cs := &Session{
 			conn:       conn,
 			ip:         ip,
-			Extranonce: fmt.Sprintf("%x", s.rng.Intn(0xffff)),
+			Extranonce: fmt.Sprintf("%04x", s.rng.Intn(0xffff)),
 		}
 
 		accept <- n
