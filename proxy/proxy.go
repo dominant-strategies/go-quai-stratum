@@ -35,6 +35,7 @@ const (
 )
 
 type ProxyServer struct {
+	context            context.Context
 	config             *Config
 	blockTemplate      atomic.Value
 	upstreams          *[]Upstream
@@ -88,6 +89,7 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	policy := policy.Start(&cfg.Proxy.Policy, backend)
 
 	proxy := &ProxyServer{
+		context:   context.Background(),
 		config:    cfg,
 		upstreams: &cfg.Upstream,
 		backend:   backend,
@@ -231,7 +233,7 @@ func (s *ProxyServer) Start() {
 		MaxHeaderBytes: s.config.Proxy.LimitHeadersSize,
 	}
 
-	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(context.Background(), s.updateCh); err != nil {
+	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, s.updateCh); err != nil {
 		log.Global.Fatal("Failed to subscribe to pending header events: ", err)
 	}
 
@@ -267,7 +269,7 @@ func (s *ProxyServer) markOk() {
 }
 
 func (s *ProxyServer) fetchBlockTemplate() {
-	pendingHeader, err := s.clients[common.ZONE_CTX].GetPendingHeader(context.Background())
+	pendingHeader, err := s.clients[common.ZONE_CTX].GetPendingHeader(s.context)
 	if err != nil {
 		log.Global.Printf("Error while getting pending header (work) on %s: %s", (*s.upstreams)[common.ZONE_CTX].Name, err)
 		return
@@ -328,7 +330,7 @@ func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.WorkOb
 		log.Global.Printf("Stale header received, block number: %d", wObject.NumberU64(common.ZONE_CTX))
 	}
 
-	err := s.clients[common.ZONE_CTX].ReceiveWorkShare(context.Background(), wObject.WorkObjectHeader())
+	err := s.clients[common.ZONE_CTX].ReceiveWorkShare(s.context, wObject.WorkObjectHeader())
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +345,7 @@ func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) 
 		return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
 	}
 
-	order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(context.Background(), wObject)
+	order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(s.context, wObject)
 	if err != nil {
 		return fmt.Errorf("rejecting header: %v", err)
 	}
@@ -353,7 +355,7 @@ func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) 
 	// Send mined header to the relevant go-quai nodes.
 	// Should be synchronous starting with the lowest levels.
 	for i := common.HierarchyDepth - 1; i >= order; i-- {
-		err := s.clients[i].ReceiveMinedHeader(context.Background(), wObject)
+		err := s.clients[i].ReceiveMinedHeader(s.context, wObject)
 		if err != nil {
 			// Header was rejected. Refresh workers to try again.
 			cs.pushNewJob(s.currentBlockTemplate())
