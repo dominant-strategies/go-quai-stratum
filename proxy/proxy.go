@@ -42,6 +42,7 @@ type ProxyServer struct {
 	clients            SliceClients
 	backend            *storage.RedisClient
 	diff               string
+	threshold          uint64
 	policy             *policy.PolicyServer
 	hashrateExpiration time.Duration
 	failsCount         int64
@@ -95,13 +96,15 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		backend:   backend,
 		policy:    policy,
 		engine: progpow.New(
-			progpow.Config{},
+			progpow.Config{
+				NotifyFull:   true,
+				NodeLocation: common.Location{0, 0}},
 			nil,
 			false,
 			log.Global,
 		),
 		updateCh: make(chan []byte, 5*1024),
-		woCache:  lru.NewLRU[uint, *types.WorkObject](10, nil, 0),
+		woCache:  lru.NewLRU[uint, *types.WorkObject](100, nil, 0),
 	}
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
@@ -115,6 +118,7 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	refreshTimer := time.NewTimer(refreshIntv)
 	log.Global.Printf("Set block refresh every %v", refreshIntv)
 
+	proxy.threshold = proxy.clients[common.ZONE_CTX].GetWorkShareP2PThreshold(proxy.context)
 	proxy.fetchBlockTemplate()
 
 	if cfg.Proxy.Stratum.Enabled {
@@ -285,7 +289,13 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 		return
 	}
 
-	threshold, err := consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), getWorkshareThresholdDiff(int(pendingWo.NumberU64(common.ZONE_CTX))))
+	var threshold *big.Int
+	var err error
+	if pendingWo.NumberU64(common.ZONE_CTX) < params.GoldenAgeForkNumberV3 {
+		threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), getWorkshareThresholdDiff(int(pendingWo.NumberU64(common.ZONE_CTX))))
+	} else {
+		threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), int(s.threshold))
+	}
 	if err != nil {
 		log.Global.WithField("err", err).Error("Error calculating the target")
 		return
