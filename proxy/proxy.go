@@ -22,7 +22,6 @@ import (
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
-	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 	"google.golang.org/protobuf/proto"
 
@@ -291,11 +290,7 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 
 	var threshold *big.Int
 	var err error
-	if pendingWo.NumberU64(common.ZONE_CTX) < params.GoldenAgeForkNumberV3 {
-		threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), getWorkshareThresholdDiff(int(pendingWo.NumberU64(common.ZONE_CTX))))
-	} else {
-		threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), int(s.threshold))
-	}
+	threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), int(s.threshold))
 	if err != nil {
 		log.Global.WithField("err", err).Error("Error calculating the target")
 		return
@@ -374,12 +369,4 @@ func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) 
 	}
 
 	return nil
-}
-
-func getWorkshareThresholdDiff(blockNumber int) int {
-	if blockNumber < params.GoldenAgeForkNumberV1 {
-		return params.OldWorkSharesThresholdDiff
-	} else {
-		return params.NewWorkSharesThresholdDiff
-	}
 }
