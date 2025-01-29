@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"strconv"
 
 	"github.com/dominant-strategies/go-quai-stratum/util"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
+	"github.com/dominant-strategies/go-quai/log"
 )
 
 const (
@@ -25,27 +25,33 @@ func (s *ProxyServer) ListenTCP() {
 
 	addr, err := net.ResolveTCPAddr("tcp4", s.config.Proxy.Stratum.Listen)
 	if err != nil {
-		log.Fatalf("Error: %v", err)
+		log.Global.WithFields(log.Fields{
+			"addr": addr,
+			"err":  err,
+		}).Fatalf("Unable to resolve TCP address")
 	}
 	server, err := net.ListenTCP("tcp4", addr)
 	if err != nil {
-		log.Fatalf("Error: %v", err)
+		log.Global.WithFields(log.Fields{
+			"addr": addr,
+			"err":  err,
+		}).Fatalf("Unable to bind to specified TCP address")
 	}
 	defer server.Close()
 
-	log.Printf("Stratum listening on %s", s.config.Proxy.Stratum.Listen)
+	log.Global.WithField("address", s.config.Proxy.Stratum.Listen).Info("Stratum listening address")
 	var accept = make(chan int, s.config.Proxy.Stratum.MaxConn)
 
 	n := 0
 	for {
 		conn, err := server.AcceptTCP()
 		if err != nil {
-			log.Printf("Error accepting connection: %v", err)
+			log.Global.WithField("err", err).Warn("Error accepting connection")
 			continue
 		}
 		conn.SetKeepAlive(true)
 
-		ip, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+		ip, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
 		if s.policy.IsBanned(ip) || !s.policy.ApplyLimitPolicy(ip) {
 			conn.Close()
@@ -55,6 +61,7 @@ func (s *ProxyServer) ListenTCP() {
 		cs := &Session{
 			conn:       conn,
 			ip:         ip,
+			port:       port,
 			Extranonce: fmt.Sprintf("%04x", s.rng.Intn(0xffff)),
 		}
 
@@ -62,7 +69,7 @@ func (s *ProxyServer) ListenTCP() {
 		go func(cs *Session) {
 			err = s.handleTCPClient(cs)
 			if err != nil {
-				log.Printf("Error handling client: %v", err)
+				log.Global.WithField("err", err).Warn("Error handling client")
 				s.removeSession(cs)
 				conn.Close()
 			}
@@ -94,18 +101,26 @@ func (s *ProxyServer) handleTCPClient(cs *Session) error {
 	for {
 		data, isPrefix, err := connbuff.ReadLine()
 		if isPrefix {
-			log.Printf("Socket flood detected from %s", cs.ip)
+			log.Global.WithFields(log.Fields{
+				"ip":   cs.ip,
+				"port": cs.port,
+				"err":  err,
+			}).Warn("Socket flood detected")
 			s.policy.BanClient(cs.ip)
 			cs.sendTCPError(err)
 			s.removeSession(cs)
 			return err
 		} else if err == io.EOF {
-			log.Printf("Client %s disconnected", cs.ip)
+			log.Global.WithFields(log.Fields{
+				"ip":   cs.ip,
+				"port": cs.port,
+				"err":  err,
+			}).Warn("Client disconnected")
 			cs.sendTCPError(err)
 			s.removeSession(cs)
 			break
 		} else if err != nil {
-			log.Printf("Error reading from socket: %v", err)
+			log.Global.WithField("err", err).Warn("Error reading from socket")
 			cs.sendTCPError(err)
 			return err
 		}
@@ -160,7 +175,11 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 		}
 		err := cs.sendMessage(&response)
 		if err != nil {
-			log.Printf("Error encoding JSON: %v", err)
+			log.Global.WithFields(log.Fields{
+				"err":    err,
+				"client": cs.ip,
+				"port":   cs.port,
+			}).Warn("Error encoding JSON")
 			return err
 		}
 		return s.handleLoginRPC(cs, *req)
@@ -170,7 +189,11 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 
 		jobId, err := strconv.ParseUint(req.Params.([]interface{})[0].(string), 16, 0)
 		if err != nil {
-			log.Printf("Error decoding jobID: %v", err)
+			log.Global.WithFields(log.Fields{
+				"err":    err,
+				"client": cs.ip,
+				"port":   cs.port,
+			}).Warn("Error decoding jobID")
 			errorResponse = Response{
 				ID: req.Id,
 				Error: map[string]interface{}{
@@ -184,7 +207,11 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 		nonceStr := cs.Extranonce + req.Params.([]interface{})[1].(string)
 		nonce, err := hex.DecodeString(nonceStr)
 		if err != nil {
-			log.Printf("Error decoding nonce: %v", err)
+			log.Global.WithFields(log.Fields{
+				"err":    err,
+				"client": cs.ip,
+				"port":   cs.port,
+			}).Warn("Error decoding nonce")
 			errorResponse = Response{
 				ID: req.Id,
 				Error: map[string]interface{}{
@@ -197,7 +224,11 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 
 		header, err := s.verifyMinedHeader(uint(jobId), nonce)
 		if err != nil {
-			log.Printf("Unable to verify header: %v", err)
+			log.Global.WithFields(log.Fields{
+				"err":    err,
+				"client": cs.ip,
+				"port":   cs.port,
+			}).Warn("Unable to verify header")
 			errorResponse = Response{
 				ID: req.Id,
 				Error: map[string]interface{}{
@@ -211,9 +242,13 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 
 		err = s.submitMinedHeader(cs, header)
 		if err != nil {
-			log.Printf("Miner submitted a workShare")
+			log.Global.WithField("workShareHash", header.Hash()).Info("Miner submitted a workShare")
 		} else {
-			log.Printf("Miner submitted a block. Location: %s. Number: %d. Blockhash: %#x", s.config.Upstream[common.ZONE_CTX].Name, header.NumberU64(common.ZONE_CTX), header.Hash())
+			log.Global.WithFields(log.Fields{
+				"location":  s.config.Upstream[common.ZONE_CTX].Name,
+				"number":    header.NumberArray(),
+				"blockhash": header.Hash(),
+			}).Info("Miner submitted a block")
 		}
 
 		successResponse := Response{
@@ -299,7 +334,7 @@ func (s *ProxyServer) broadcastNewJobs() {
 	defer s.sessionsMu.RUnlock()
 
 	count := len(s.sessions)
-	log.Printf("Broadcasting block %d to %d stratum miners", t.WorkObject.NumberU64(common.ZONE_CTX), count)
+	log.Global.Printf("Broadcasting block %d to %d stratum miners", t.WorkObject.NumberU64(common.ZONE_CTX), count)
 
 	bcast := make(chan int, 1024)
 	n := 0
@@ -312,7 +347,12 @@ func (s *ProxyServer) broadcastNewJobs() {
 			err := cs.pushNewJob(t)
 			<-bcast
 			if err != nil {
-				log.Printf("Job transmit error to %v@%v: %v", cs.login, cs.ip, err)
+				log.Global.WithFields(log.Fields{
+					"login": cs.login,
+					"ip":    cs.ip,
+					"port":  cs.port,
+					"err":   err,
+				}).Warn("Job transmit error")
 				s.removeSession(cs)
 			}
 		}(m)

@@ -68,8 +68,9 @@ type jobDetails struct {
 }
 
 type Session struct {
-	ip  string
-	enc *json.Encoder
+	ip   string
+	port string
+	enc  *json.Encoder
 
 	// Stratum
 	sync.Mutex
@@ -309,13 +310,18 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 
 	s.blockTemplate.Store(&newTemplate)
 	s.woCache.Add(newTemplate.JobID, newTemplate.WorkObject)
-	log.Global.Printf("New block to mine on %s at height %d", s.config.Upstream[common.ZONE_CTX].Name, pendingWo.NumberArray())
-
 	difficultyMh := strconv.FormatUint(new(big.Int).Div(consensus.TargetToDifficulty(newTemplate.Target), big.NewInt(1000)).Uint64(), 10)
+	log.Global.WithFields(log.Fields{
+		"location": s.config.Upstream[common.ZONE_CTX].Name,
+		"number":   pendingWo.NumberArray(),
+		"sealHash": pendingWo.SealHash(),
+	}).Printf("New block to mine")
+
 	if len(difficultyMh) >= 3 {
-		log.Global.Printf("Workshare difficulty: %s.%s Mh", difficultyMh[:len(difficultyMh)-3], difficultyMh[len(difficultyMh)-3:])
+		log.Global.WithField(
+			"difficulty", difficultyMh[:len(difficultyMh)-3]+"."+difficultyMh[len(difficultyMh)-3:]+"Mh",
+		).Info("Workshare difficulty")
 	}
-	log.Global.Printf("Sealhash: %#x", pendingWo.SealHash())
 
 	go s.broadcastNewJobs()
 }

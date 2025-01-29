@@ -2,11 +2,11 @@ package proxy
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strings"
 
 	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/log"
 )
 
 // Allow only lowercase hexadecimal with 0x prefix
@@ -36,7 +36,11 @@ func (s *ProxyServer) handleLoginRPC(cs *Session, req Request) error {
 	}
 	cs.login = login
 	s.registerSession(cs)
-	log.Printf("Stratum miner connected %v@%v", login, cs.ip)
+	log.Global.WithFields(log.Fields{
+		"login": cs.login,
+		"ip":    cs.ip,
+		"port":  cs.port,
+	}).Printf("Stratum miner connected")
 
 	if s.config.Proxy.Stratum.Enabled {
 		// Provide the difficulty to the client. Must be completed before `mining.notify`.
