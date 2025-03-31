@@ -289,6 +289,11 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 		return
 	}
 
+	if pendingWo.PrimeTerminusNumber() == nil {
+		// Return rather than crashing if the header is not yet available.
+		return
+	}
+
 	var threshold *big.Int
 	var err error
 	threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), int(s.threshold))
