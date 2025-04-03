@@ -285,18 +285,25 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 	t := s.currentBlockTemplate()
 
 	// Short circuit if the pending header is the same as the current one
-	if t != nil && t.WorkObject != nil && t.WorkObject.WorkObjectHeader() != nil && t.WorkObject.WorkObjectHeader().SealHash() == pendingWo.SealHash() {
+	if t != nil && t.WorkObject != nil && t.WorkObject.WorkObjectHeader() != nil && t.WorkObject.Time() == pendingWo.Time() {
 		return
 	}
 
-	if pendingWo.PrimeTerminusNumber() == nil {
+	// Modify the header coinbase to be the miner's address.
+	newWo := types.CopyWorkObjectHeader(pendingWo.WorkObjectHeader())
+	newWo.PickCoinbase(s.config.Proxy.MinerPreference, s.config.Proxy.QuaiCoinbase, s.config.Proxy.QiCoinbase)
+	newWo.SetLock(s.config.Proxy.Lockup)
+
+	log.Global.WithField("coinbase", newWo.PrimaryCoinbase()).Warn("coinbase set")
+
+	if newWo.PrimeTerminusNumber() == nil {
 		// Return rather than crashing if the header is not yet available.
 		return
 	}
 
 	var threshold *big.Int
 	var err error
-	threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), int(s.threshold))
+	threshold, err = consensus.CalcWorkShareThreshold(newWo, int(s.threshold))
 	if err != nil {
 		log.Global.WithField("err", err).Error("Error calculating the target")
 		return

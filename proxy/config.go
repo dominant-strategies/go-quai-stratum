@@ -4,6 +4,7 @@ import (
 	"github.com/dominant-strategies/go-quai-stratum/api"
 	"github.com/dominant-strategies/go-quai-stratum/policy"
 	"github.com/dominant-strategies/go-quai-stratum/storage"
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 )
 
@@ -39,6 +40,11 @@ type Proxy struct {
 	Difficulty           *hexutil.Big `json:"difficulty"`
 	StateUpdateInterval  string       `json:"stateUpdateInterval"`
 	HashrateExpiration   string       `json:"hashrateExpiration"`
+
+	QuaiCoinbase    common.Address `json:"quaiCoinbase"`
+	QiCoinbase      common.Address `json:"qiCoinbase"`
+	Lockup          uint8          `json:"lockup"`
+	MinerPreference float64        `json:"minerPreference"`
 
 	Policy policy.Config `json:"policy"`
 
