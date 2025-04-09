@@ -12,6 +12,7 @@ import (
 	"github.com/dominant-strategies/go-quai-stratum/util"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
+	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 )
 
@@ -62,6 +63,7 @@ func (s *ProxyServer) ListenTCP() {
 			conn:       conn,
 			ip:         ip,
 			port:       port,
+			sealMining: s.config.Proxy.SealMining,
 			Extranonce: fmt.Sprintf("%04x", s.rng.Intn(0xffff)),
 		}
 
@@ -222,33 +224,54 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 			return cs.sendMessage(&errorResponse)
 		}
 
-		header, err := s.verifyMinedHeader(uint(jobId), nonce)
-		if err != nil {
-			log.Global.WithFields(log.Fields{
-				"err":    err,
-				"client": cs.ip,
-				"port":   cs.port,
-			}).Warn("Unable to verify header")
-			errorResponse = Response{
-				ID: req.Id,
-				Error: map[string]interface{}{
-					"code":    406,
-					"message": "Bad nonce",
-				},
+		// If in seal mining mode, the nonce is simply returned to the host.
+		if s.config.Proxy.SealMining {
+			err := s.receiveNonce(uint(jobId), types.BlockNonce(nonce))
+			if err != nil {
+				log.Global.WithFields(log.Fields{
+					"err":    err,
+					"client": cs.ip,
+					"port":   cs.port,
+				}).Warn("Unable to verify header")
+				errorResponse = Response{
+					ID: req.Id,
+					Error: map[string]interface{}{
+						"code":    406,
+						"message": "Bad nonce",
+					},
+				}
+				cs.setMining(s.currentBlockTemplate())
+				return cs.sendMessage(&errorResponse)
 			}
-			cs.setMining(s.currentBlockTemplate())
-			return cs.sendMessage(&errorResponse)
-		}
-
-		err = s.submitMinedHeader(cs, header)
-		if err != nil {
-			log.Global.WithField("workShareHash", header.Hash()).Info("Miner submitted a workShare")
 		} else {
-			log.Global.WithFields(log.Fields{
-				"location":  s.config.Upstream[common.ZONE_CTX].Name,
-				"number":    header.NumberArray(),
-				"blockhash": header.Hash(),
-			}).Info("Miner submitted a block")
+			header, err := s.verifyMinedHeader(uint(jobId), nonce)
+			if err != nil {
+				log.Global.WithFields(log.Fields{
+					"err":    err,
+					"client": cs.ip,
+					"port":   cs.port,
+				}).Warn("Unable to verify header")
+				errorResponse = Response{
+					ID: req.Id,
+					Error: map[string]interface{}{
+						"code":    406,
+						"message": "Bad nonce",
+					},
+				}
+				cs.setMining(s.currentBlockTemplate())
+				return cs.sendMessage(&errorResponse)
+			}
+
+			err = s.submitMinedHeader(cs, header)
+			if err != nil {
+				log.Global.WithField("workShareHash", header.Hash()).Info("Miner submitted a workShare")
+			} else {
+				log.Global.WithFields(log.Fields{
+					"location":  s.config.Upstream[common.ZONE_CTX].Name,
+					"number":    header.NumberArray(),
+					"blockhash": header.Hash(),
+				}).Info("Miner submitted a block")
+			}
 		}
 
 		successResponse := Response{
@@ -286,15 +309,26 @@ func (cs *Session) pushNewJob(template *BlockTemplate) error {
 	// Update target to worker.
 	cs.setMining(template)
 
-	notification := Notification{
+	var notification Notification = Notification{
 		Method: "mining.notify",
 		Params: []string{
 			fmt.Sprintf("%x", template.JobID),
-			fmt.Sprintf("%x", template.WorkObject.PrimeTerminusNumber().Uint64()),
-			fmt.Sprintf("%x", template.WorkObject.SealHash()),
-			"0",
 		},
 	}
+	if cs.sealMining {
+		// The SealHash is provided directly by the template.
+		notification.Params = append(notification.Params.([]string),
+			fmt.Sprintf("%x", template.Height[common.PRIME_CTX]), // Mining clients should not use this number to determine the epoch according to EthStratumV2.
+			fmt.Sprintf("%x", template.CustomSeal),
+		)
+	} else {
+		// The SealHash is generated from the work object.
+		notification.Params = append(notification.Params.([]string),
+			fmt.Sprintf("%x", template.WorkObject.PrimeTerminusNumber().Uint64()),
+			fmt.Sprintf("%x", template.WorkObject.SealHash()),
+		)
+	}
+	notification.Params = append(notification.Params.([]string), "0")
 	return cs.sendMessage(&notification)
 }
 

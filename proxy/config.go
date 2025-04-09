@@ -41,6 +41,7 @@ type Proxy struct {
 	StateUpdateInterval  string       `json:"stateUpdateInterval"`
 	HashrateExpiration   string       `json:"hashrateExpiration"`
 
+	SealMining      bool           `json:"sealMining"`
 	QuaiCoinbase    common.Address `json:"quaiCoinbase"`
 	QiCoinbase      common.Address `json:"qiCoinbase"`
 	Lockup          uint8          `json:"lockup"`

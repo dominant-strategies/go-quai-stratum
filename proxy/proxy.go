@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	quai "github.com/dominant-strategies/go-quai"
 	"github.com/dominant-strategies/go-quai-stratum/policy"
 	"github.com/dominant-strategies/go-quai-stratum/storage"
 	"github.com/dominant-strategies/go-quai-stratum/util"
@@ -49,10 +50,11 @@ type ProxyServer struct {
 	rng                *rand.Rand
 
 	// Channel to receive header updates
-	updateCh chan []byte
+	updateCh   chan []byte
+	customWoCh chan *quai.WorkShareUpdate
 
 	// Keep track of previous headers
-	woCache *lru.LRU[uint, *types.WorkObject]
+	woCache *lru.LRU[uint, workEntry]
 
 	// Stratum
 	sessionsMu sync.RWMutex
@@ -60,28 +62,25 @@ type ProxyServer struct {
 	timeout    time.Duration
 	Extranonce string
 }
-
-type jobDetails struct {
-	JobID      string
-	SeedHash   string
-	HeaderHash string
-}
-
 type Session struct {
-	ip   string
-	port string
-	enc  *json.Encoder
+	ip         string
+	port       string
+	enc        *json.Encoder
+	sealMining bool // true if the client is mining via only sealHashes (decentralized pool)
 
 	// Stratum
 	sync.Mutex
-	conn           *net.TCPConn
-	login          string
-	subscriptionID string
-	Extranonce     string
-	JobDetails     jobDetails
+	conn       *net.TCPConn
+	login      string
+	Extranonce string
 }
 
 type SliceClients [common.HierarchyDepth]*quaiclient.Client
+
+type workEntry struct {
+	sealHash common.Hash
+	wo       *types.WorkObject
+}
 
 func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	if len(cfg.Name) == 0 {
@@ -103,9 +102,15 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 			false,
 			log.Global,
 		),
-		updateCh: make(chan []byte, 5*1024),
-		woCache:  lru.NewLRU[uint, *types.WorkObject](100, nil, 0),
+		woCache: lru.NewLRU[uint, workEntry](100, nil, 0),
 	}
+
+	if cfg.Proxy.SealMining {
+		proxy.customWoCh = make(chan *quai.WorkShareUpdate, 5*1024)
+	} else {
+		proxy.updateCh = make(chan []byte, 5*1024)
+	}
+
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
 	proxy.clients = proxy.connectToSlice()
@@ -156,6 +161,9 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 					}
 					proxy.updateBlockTemplate(pendingHeader)
 				}
+			case customWo := <-proxy.customWoCh:
+				proxy.updateCustomSealTemplate(customWo)
+
 			}
 		}
 	}()
@@ -237,8 +245,20 @@ func (s *ProxyServer) Start() {
 		MaxHeaderBytes: s.config.Proxy.LimitHeadersSize,
 	}
 
-	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, s.updateCh); err != nil {
-		log.Global.Fatal("Failed to subscribe to pending header events: ", err)
+	if s.config.Proxy.SealMining {
+		crit := quai.WorkShareCriteria{
+			QuaiCoinbase:    s.config.Proxy.QuaiCoinbase,
+			QiCoinbase:      s.config.Proxy.QiCoinbase,
+			MinerPreference: s.config.Proxy.MinerPreference,
+			LockupByte:      s.config.Proxy.Lockup,
+		}
+		if _, err := s.clients[common.ZONE_CTX].SubscribeCustomSealHash(s.context, crit, s.customWoCh); err != nil {
+			log.Global.Fatal("Failed to subscribe to custom seal hash events: ", err)
+		}
+	} else {
+		if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, s.updateCh); err != nil {
+			log.Global.Fatal("Failed to subscribe to pending header events: ", err)
+		}
 	}
 
 	err := srv.ListenAndServe()
@@ -301,27 +321,20 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 		return
 	}
 
-	var threshold *big.Int
-	var err error
-	threshold, err = consensus.CalcWorkShareThreshold(newWo, int(s.threshold))
+	threshold, err := consensus.CalcWorkShareThreshold(newWo.Difficulty(), int(s.threshold))
 	if err != nil {
 		log.Global.WithField("err", err).Error("Error calculating the target")
 		return
 	}
-	newTemplate := BlockTemplate{
+	newTemplate := &BlockTemplate{
 		WorkObject: pendingWo,
 		Target:     threshold,
 		Height:     pendingWo.NumberArray(),
+		CustomSeal: pendingWo.SealHash(),
 	}
 
-	if t == nil {
-		newTemplate.JobID = 0
-	} else {
-		newTemplate.JobID = t.JobID + 1
-	}
+	s.finalizeTemplate(newTemplate)
 
-	s.blockTemplate.Store(&newTemplate)
-	s.woCache.Add(newTemplate.JobID, newTemplate.WorkObject)
 	difficultyMh := strconv.FormatUint(new(big.Int).Div(consensus.TargetToDifficulty(newTemplate.Target), big.NewInt(1000)).Uint64(), 10)
 	log.Global.WithFields(log.Fields{
 		"location": s.config.Upstream[common.ZONE_CTX].Name,
@@ -334,15 +347,57 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 			"difficulty", difficultyMh[:len(difficultyMh)-3]+"."+difficultyMh[len(difficultyMh)-3:]+"Mh",
 		).Info("Workshare difficulty")
 	}
+}
+
+func (s *ProxyServer) updateCustomSealTemplate(workShareUpdate *quai.WorkShareUpdate) {
+	threshold, err := consensus.CalcWorkShareThreshold(workShareUpdate.Difficulty, int(s.threshold))
+	if err != nil {
+		log.Global.WithField("err", err).Error("Error with the provided workshare difficulty or threshold")
+	}
+
+	newTemplate := &BlockTemplate{
+		CustomSeal:          workShareUpdate.SealHash,
+		Target:              threshold,
+		PrimeTerminusNumber: workShareUpdate.PrimeTerminusNumber,
+	}
+
+	s.finalizeTemplate(newTemplate)
+}
+
+func (s *ProxyServer) finalizeTemplate(newTemplate *BlockTemplate) {
+	currentTemplate := s.currentBlockTemplate()
+
+	if currentTemplate == nil {
+		newTemplate.JobID = 0
+	} else {
+		newTemplate.JobID = currentTemplate.JobID + 1
+	}
+
+	s.blockTemplate.Store(newTemplate)
+	s.woCache.Add(newTemplate.JobID, workEntry{
+		sealHash: newTemplate.CustomSeal,
+		wo:       newTemplate.WorkObject,
+	})
 
 	go s.broadcastNewJobs()
 }
 
+func (s *ProxyServer) receiveNonce(jobID uint, nonce types.BlockNonce) error {
+	workEntry, ok := s.woCache.Get(jobID)
+	if !ok {
+		return fmt.Errorf("unable to find header for that jobID: %d", jobID)
+	}
+
+	return s.clients[common.ZONE_CTX].ReceiveNonce(s.context, workEntry.sealHash, nonce)
+}
+
 func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.WorkObject, error) {
-	wObject, ok := s.woCache.Get(jobID)
+	workEntry, ok := s.woCache.Get(jobID)
 	if !ok {
 		return nil, fmt.Errorf("unable to find header for that jobID: %d", jobID)
 	}
+
+	wObject := workEntry.wo
 	wObject = types.CopyWorkObject(wObject)
 
 	wObject.WorkObjectHeader().SetNonce(types.BlockNonce(nonce))
