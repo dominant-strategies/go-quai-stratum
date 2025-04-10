@@ -318,7 +318,7 @@ func (cs *Session) pushNewJob(template *BlockTemplate) error {
 	if cs.sealMining {
 		// The SealHash is provided directly by the template.
 		notification.Params = append(notification.Params.([]string),
-			fmt.Sprintf("%x", template.Height[common.PRIME_CTX]), // Mining clients should not use this number to determine the epoch according to EthStratumV2.
+			fmt.Sprintf("%x", template.PrimeTerminusNumber), // Mining clients should not use this number to determine the epoch according to EthStratumV2.
 			fmt.Sprintf("%x", template.CustomSeal),
 		)
 	} else {
@@ -346,21 +346,35 @@ func (s *ProxyServer) removeSession(cs *Session) {
 
 // func (cs *Session) setMining(target common.Hash) error {
 func (cs *Session) setMining(template *BlockTemplate) error {
-	notification := Notification{
-		Method: "mining.set",
-		Params: map[string]interface{}{
-			"epoch":      fmt.Sprintf("%x", int(template.WorkObject.PrimeTerminusNumber().Uint64()/progpow.C_epochLength)),
-			"target":     common.BytesToHash(template.Target.Bytes()).Hex()[2:],
-			"algo":       "progpow",
-			"extranonce": cs.Extranonce,
-		},
+	var notification Notification
+	if !cs.sealMining {
+		notification = Notification{
+			Method: "mining.set",
+			Params: map[string]any{
+				"epoch":      fmt.Sprintf("%x", int(template.WorkObject.PrimeTerminusNumber().Uint64()/progpow.C_epochLength)),
+				"target":     common.BytesToHash(template.Target.Bytes()).Hex()[2:],
+				"algo":       "progpow",
+				"extranonce": cs.Extranonce,
+			},
+		}
+	} else {
+		// We are SealMining.
+		notification = Notification{
+			Method: "mining.set",
+			Params: map[string]any{
+				"epoch":      fmt.Sprintf("%x", int(template.PrimeTerminusNumber.Uint64()/progpow.C_epochLength)),
+				"target":     common.BytesToHash(template.Target.Bytes()).Hex()[2:],
+				"algo":       "progpow",
+				"extranonce": cs.Extranonce,
+			},
+		}
 	}
 	return cs.sendMessage(&notification)
 }
 
 func (s *ProxyServer) broadcastNewJobs() {
 	t := s.currentBlockTemplate()
-	if t == nil || t.WorkObject == nil || t.Target == nil || s.isSick() {
+	if !s.config.Proxy.SealMining && (t == nil || t.WorkObject == nil || t.Target == nil || s.isSick()) {
 		return
 	}
 
@@ -368,7 +382,11 @@ func (s *ProxyServer) broadcastNewJobs() {
 	defer s.sessionsMu.RUnlock()
 
 	count := len(s.sessions)
-	log.Global.Printf("Broadcasting block %d to %d stratum miners", t.WorkObject.NumberU64(common.ZONE_CTX), count)
+	if !s.config.Proxy.SealMining {
+		log.Global.Printf("Broadcasting block %d to %d stratum miners", t.WorkObject.NumberU64(common.ZONE_CTX), count)
+	} else {
+		log.Global.Printf("Broadcasting to %d stratum miners", count)
+	}
 
 	bcast := make(chan int, 1024)
 	n := 0

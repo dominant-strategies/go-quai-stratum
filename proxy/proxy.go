@@ -124,7 +124,11 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	log.Global.Printf("Set block refresh every %v", refreshIntv)
 
 	proxy.threshold = proxy.clients[common.ZONE_CTX].GetWorkShareP2PThreshold(proxy.context)
-	proxy.fetchBlockTemplate()
+
+	if !cfg.Proxy.SealMining {
+		// The node will only provide the workobject if SealMining is not enabled.
+		proxy.fetchBlockTemplate()
+	}
 
 	if cfg.Proxy.Stratum.Enabled {
 		proxy.sessions = make(map[*Session]struct{})
@@ -135,8 +139,10 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		for {
 			select {
 			case <-refreshTimer.C:
-				proxy.fetchBlockTemplate()
-				refreshTimer.Reset(refreshIntv)
+				if !cfg.Proxy.SealMining {
+					proxy.fetchBlockTemplate()
+					refreshTimer.Reset(refreshIntv)
+				}
 			case newPendingHeader := <-proxy.updateCh:
 				if len(newPendingHeader) > 0 {
 					protoWo := &types.ProtoWorkObject{}
@@ -252,6 +258,7 @@ func (s *ProxyServer) Start() {
 			MinerPreference: s.config.Proxy.MinerPreference,
 			LockupByte:      s.config.Proxy.Lockup,
 		}
+		// s.clients[common.ZONE_CTX].SubscribeFilterLogs(s.context, quai.FilterQuery{}, make(chan<- types.Log))
 		if _, err := s.clients[common.ZONE_CTX].SubscribeCustomSealHash(s.context, crit, s.customWoCh); err != nil {
 			log.Global.Fatal("Failed to subscribe to custom seal hash events: ", err)
 		}
@@ -336,11 +343,6 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 	s.finalizeTemplate(newTemplate)
 
 	difficultyMh := strconv.FormatUint(new(big.Int).Div(consensus.TargetToDifficulty(newTemplate.Target), big.NewInt(1000)).Uint64(), 10)
-	log.Global.WithFields(log.Fields{
-		"location": s.config.Upstream[common.ZONE_CTX].Name,
-		"number":   pendingWo.NumberArray(),
-		"sealHash": pendingWo.SealHash(),
-	}).Printf("New block to mine")
 
 	if len(difficultyMh) >= 3 {
 		log.Global.WithField(
@@ -378,6 +380,19 @@ func (s *ProxyServer) finalizeTemplate(newTemplate *BlockTemplate) {
 		sealHash: newTemplate.CustomSeal,
 		wo:       newTemplate.WorkObject,
 	})
+
+	if !s.config.Proxy.SealMining {
+		log.Global.WithFields(log.Fields{
+			"location": s.config.Upstream[common.ZONE_CTX].Name,
+			"number":   newTemplate.WorkObject.NumberArray(),
+			"sealHash": newTemplate.WorkObject.SealHash(),
+		}).Printf("New block to mine")
+	} else {
+		log.Global.WithFields(log.Fields{
+			"location": s.config.Upstream[common.ZONE_CTX].Name,
+			"sealHash": newTemplate.CustomSeal,
+		}).Printf("New block to mine")
+	}
 
 	go s.broadcastNewJobs()
 }
