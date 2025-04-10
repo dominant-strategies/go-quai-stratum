@@ -7,27 +7,16 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
-
-	"github.com/dominant-strategies/go-quai/common/hexutil"
 )
 
 type BlockTemplate struct {
 	sync.RWMutex
-	WorkObject *types.WorkObject
-	Target     *big.Int
-	Difficulty *big.Int
-	Height     []*big.Int
+	WorkObject          *types.WorkObject
+	Target              *big.Int
+	Difficulty          *big.Int
+	Height              []*big.Int
+	PrimeTerminusNumber *big.Int
+
+	CustomSeal common.Hash // Used for decentralized mining pools where the full workObject is not provided.
 	JobID      uint
 }
-
-type Block struct {
-	difficulty  []*hexutil.Big
-	hashNoNonce common.Hash
-	nonce       uint64
-	number      uint64
-}
-
-func (b Block) Difficulty() []*hexutil.Big { return b.difficulty }
-func (b Block) HashNoNonce() common.Hash   { return b.hashNoNonce }
-func (b Block) Nonce() uint64              { return b.nonce }
-func (b Block) NumberU64() uint64          { return b.number }
