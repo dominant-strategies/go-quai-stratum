@@ -243,6 +243,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 				cs.setMining(s.currentBlockTemplate())
 				return cs.sendMessage(&errorResponse)
 			}
+			log.Global.Info("Miner submitted a workShare")
 		} else {
 			header, err := s.verifyMinedHeader(uint(jobId), nonce)
 			if err != nil {

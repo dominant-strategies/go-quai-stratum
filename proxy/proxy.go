@@ -23,6 +23,7 @@ import (
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 	"google.golang.org/protobuf/proto"
 
@@ -124,6 +125,8 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	log.Global.Printf("Set block refresh every %v", refreshIntv)
 
 	proxy.threshold = proxy.clients[common.ZONE_CTX].GetWorkShareP2PThreshold(proxy.context)
+	proxy.threshold = uint64(params.WorkSharesThresholdDiff)
+	proxy.threshold = 1
 
 	if !cfg.Proxy.SealMining {
 		// The node will only provide the workobject if SealMining is not enabled.
