@@ -9,11 +9,11 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	quai "github.com/dominant-strategies/go-quai"
 	"github.com/dominant-strategies/go-quai-stratum/policy"
 	"github.com/dominant-strategies/go-quai-stratum/storage"
 	"github.com/dominant-strategies/go-quai-stratum/util"
@@ -49,10 +49,11 @@ type ProxyServer struct {
 	rng                *rand.Rand
 
 	// Channel to receive header updates
-	updateCh chan []byte
+	updateCh   chan []byte
+	customWoCh chan *quai.WorkShareUpdate
 
 	// Keep track of previous headers
-	woCache *lru.LRU[uint, *types.WorkObject]
+	woCache *lru.LRU[uint, workEntry]
 
 	// Stratum
 	sessionsMu sync.RWMutex
@@ -60,28 +61,25 @@ type ProxyServer struct {
 	timeout    time.Duration
 	Extranonce string
 }
-
-type jobDetails struct {
-	JobID      string
-	SeedHash   string
-	HeaderHash string
-}
-
 type Session struct {
-	ip   string
-	port string
-	enc  *json.Encoder
+	ip         string
+	port       string
+	enc        *json.Encoder
+	sealMining bool // true if the client is mining via only sealHashes (decentralized pool)
 
 	// Stratum
 	sync.Mutex
-	conn           *net.TCPConn
-	login          string
-	subscriptionID string
-	Extranonce     string
-	JobDetails     jobDetails
+	conn       *net.TCPConn
+	login      string
+	Extranonce string
 }
 
 type SliceClients [common.HierarchyDepth]*quaiclient.Client
+
+type workEntry struct {
+	sealHash common.Hash
+	wo       *types.WorkObject
+}
 
 func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	if len(cfg.Name) == 0 {
@@ -103,9 +101,15 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 			false,
 			log.Global,
 		),
-		updateCh: make(chan []byte, 5*1024),
-		woCache:  lru.NewLRU[uint, *types.WorkObject](100, nil, 0),
+		woCache: lru.NewLRU[uint, workEntry](100, nil, 0),
 	}
+
+	if cfg.Proxy.SealMining {
+		proxy.customWoCh = make(chan *quai.WorkShareUpdate, 5*1024)
+	} else {
+		proxy.updateCh = make(chan []byte, 5*1024)
+	}
+
 	proxy.diff = util.GetTargetHex(cfg.Proxy.Difficulty)
 
 	proxy.clients = proxy.connectToSlice()
@@ -119,7 +123,11 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	log.Global.Printf("Set block refresh every %v", refreshIntv)
 
 	proxy.threshold = proxy.clients[common.ZONE_CTX].GetWorkShareP2PThreshold(proxy.context)
-	proxy.fetchBlockTemplate()
+
+	if !cfg.Proxy.SealMining {
+		// The node will only provide the workobject if SealMining is not enabled.
+		proxy.fetchBlockTemplate()
+	}
 
 	if cfg.Proxy.Stratum.Enabled {
 		proxy.sessions = make(map[*Session]struct{})
@@ -130,8 +138,10 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		for {
 			select {
 			case <-refreshTimer.C:
-				proxy.fetchBlockTemplate()
-				refreshTimer.Reset(refreshIntv)
+				if !cfg.Proxy.SealMining {
+					proxy.fetchBlockTemplate()
+					refreshTimer.Reset(refreshIntv)
+				}
 			case newPendingHeader := <-proxy.updateCh:
 				if len(newPendingHeader) > 0 {
 					protoWo := &types.ProtoWorkObject{}
@@ -156,6 +166,9 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 					}
 					proxy.updateBlockTemplate(pendingHeader)
 				}
+			case customWo := <-proxy.customWoCh:
+				proxy.updateCustomSealTemplate(customWo)
+
 			}
 		}
 	}()
@@ -237,8 +250,21 @@ func (s *ProxyServer) Start() {
 		MaxHeaderBytes: s.config.Proxy.LimitHeadersSize,
 	}
 
-	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, s.updateCh); err != nil {
-		log.Global.Fatal("Failed to subscribe to pending header events: ", err)
+	if s.config.Proxy.SealMining {
+		crit := quai.WorkShareCriteria{
+			QuaiCoinbase:    s.config.Proxy.QuaiCoinbase,
+			QiCoinbase:      s.config.Proxy.QiCoinbase,
+			MinerPreference: s.config.Proxy.MinerPreference,
+			LockupByte:      s.config.Proxy.Lockup,
+		}
+		// s.clients[common.ZONE_CTX].SubscribeFilterLogs(s.context, quai.FilterQuery{}, make(chan<- types.Log))
+		if _, err := s.clients[common.ZONE_CTX].SubscribeCustomSealHash(s.context, crit, s.customWoCh); err != nil {
+			log.Global.Fatal("Failed to subscribe to custom seal hash events: ", err)
+		}
+	} else {
+		if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, s.updateCh); err != nil {
+			log.Global.Fatal("Failed to subscribe to pending header events: ", err)
+		}
 	}
 
 	err := srv.ListenAndServe()
@@ -285,57 +311,114 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 	t := s.currentBlockTemplate()
 
 	// Short circuit if the pending header is the same as the current one
-	if t != nil && t.WorkObject != nil && t.WorkObject.WorkObjectHeader() != nil && t.WorkObject.WorkObjectHeader().SealHash() == pendingWo.SealHash() {
+	if t != nil && t.WorkObject != nil && t.WorkObject.WorkObjectHeader() != nil && t.WorkObject.Time() == pendingWo.Time() {
 		return
 	}
 
-	if pendingWo.PrimeTerminusNumber() == nil {
+	// Modify the header coinbase to be the miner's address.
+	newWo := types.CopyWorkObjectHeader(pendingWo.WorkObjectHeader())
+	newWo.PickCoinbase(s.config.Proxy.MinerPreference, s.config.Proxy.QuaiCoinbase, s.config.Proxy.QiCoinbase)
+	newWo.SetLock(s.config.Proxy.Lockup)
+
+	log.Global.WithField("coinbase", newWo.PrimaryCoinbase()).Warn("coinbase set")
+
+	if newWo.PrimeTerminusNumber() == nil {
 		// Return rather than crashing if the header is not yet available.
 		return
 	}
 
-	var threshold *big.Int
-	var err error
-	threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), int(s.threshold))
+	threshold, err := consensus.CalcWorkShareThreshold(newWo.Difficulty(), int(s.threshold))
 	if err != nil {
 		log.Global.WithField("err", err).Error("Error calculating the target")
 		return
 	}
-	newTemplate := BlockTemplate{
+	newTemplate := &BlockTemplate{
 		WorkObject: pendingWo,
 		Target:     threshold,
 		Height:     pendingWo.NumberArray(),
+		CustomSeal: pendingWo.SealHash(),
 	}
 
-	if t == nil {
-		newTemplate.JobID = 0
-	} else {
-		newTemplate.JobID = t.JobID + 1
-	}
+	s.finalizeTemplate(newTemplate)
 
-	s.blockTemplate.Store(&newTemplate)
-	s.woCache.Add(newTemplate.JobID, newTemplate.WorkObject)
 	difficultyMh := strconv.FormatUint(new(big.Int).Div(consensus.TargetToDifficulty(newTemplate.Target), big.NewInt(1000)).Uint64(), 10)
-	log.Global.WithFields(log.Fields{
-		"location": s.config.Upstream[common.ZONE_CTX].Name,
-		"number":   pendingWo.NumberArray(),
-		"sealHash": pendingWo.SealHash(),
-	}).Printf("New block to mine")
 
 	if len(difficultyMh) >= 3 {
 		log.Global.WithField(
 			"difficulty", difficultyMh[:len(difficultyMh)-3]+"."+difficultyMh[len(difficultyMh)-3:]+"Mh",
 		).Info("Workshare difficulty")
 	}
+}
+
+func (s *ProxyServer) updateCustomSealTemplate(workShareUpdate *quai.WorkShareUpdate) {
+	threshold, err := consensus.CalcWorkShareThreshold(workShareUpdate.Difficulty, int(s.threshold))
+	if err != nil {
+		log.Global.WithField("err", err).Error("Error with the provided workshare difficulty or threshold")
+	}
+
+	// t := s.currentBlockTemplate()
+
+	// if t != nil && t.CustomSeal == workShareUpdate.SealHash {
+	// 	return
+	// }
+	// threshold := consensus.DifficultyToTarget(workShareUpdate.Difficulty)
+
+	newTemplate := &BlockTemplate{
+		CustomSeal:          workShareUpdate.SealHash,
+		Target:              threshold,
+		PrimeTerminusNumber: workShareUpdate.PrimeTerminusNumber,
+	}
+
+	s.finalizeTemplate(newTemplate)
+}
+
+func (s *ProxyServer) finalizeTemplate(newTemplate *BlockTemplate) {
+	currentTemplate := s.currentBlockTemplate()
+
+	if currentTemplate == nil {
+		newTemplate.JobID = 0
+	} else {
+		newTemplate.JobID = currentTemplate.JobID + 1
+	}
+
+	s.blockTemplate.Store(newTemplate)
+	s.woCache.Add(newTemplate.JobID, workEntry{
+		sealHash: newTemplate.CustomSeal,
+		wo:       newTemplate.WorkObject,
+	})
+
+	if !s.config.Proxy.SealMining {
+		log.Global.WithFields(log.Fields{
+			"location": s.config.Upstream[common.ZONE_CTX].Name,
+			"number":   newTemplate.WorkObject.NumberArray(),
+			"sealHash": newTemplate.WorkObject.SealHash(),
+		}).Printf("New block to mine")
+	} else {
+		log.Global.WithFields(log.Fields{
+			"location": s.config.Upstream[common.ZONE_CTX].Name,
+			"sealHash": newTemplate.CustomSeal,
+		}).Printf("New block to mine")
+	}
 
 	go s.broadcastNewJobs()
 }
 
+func (s *ProxyServer) receiveNonce(jobID uint, nonce types.BlockNonce) error {
+	workEntry, ok := s.woCache.Get(jobID)
+	if !ok {
+		return fmt.Errorf("unable to find header for that jobID: %d", jobID)
+	}
+
+	return s.clients[common.ZONE_CTX].ReceiveNonce(s.context, workEntry.sealHash, nonce)
+}
+
 func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.WorkObject, error) {
-	wObject, ok := s.woCache.Get(jobID)
+	workEntry, ok := s.woCache.Get(jobID)
 	if !ok {
 		return nil, fmt.Errorf("unable to find header for that jobID: %d", jobID)
 	}
+
+	wObject := workEntry.wo
 	wObject = types.CopyWorkObject(wObject)
 
 	wObject.WorkObjectHeader().SetNonce(types.BlockNonce(nonce))
@@ -346,38 +429,39 @@ func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.WorkOb
 		log.Global.Printf("Stale header received, block number: %d", wObject.NumberU64(common.ZONE_CTX))
 	}
 
-	err := s.clients[common.ZONE_CTX].ReceiveWorkShare(s.context, wObject.WorkObjectHeader())
-	if err != nil {
-		return nil, err
-	}
+	// err := s.clients[common.ZONE_CTX].ReceiveMinedHeader(s.context, wObject)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	err := s.clients[common.ZONE_CTX].ReceiveNonce(s.context, workEntry.sealHash, types.BlockNonce(nonce))
 
-	return wObject, nil
+	return wObject, err
 }
 
 func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) error {
 
-	powHash, err := s.engine.VerifySeal(wObject.WorkObjectHeader())
-	if err != nil {
-		return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
-	}
+	// powHash, err := s.engine.VerifySeal(wObject.WorkObjectHeader())
+	// if err != nil {
+	// 	return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
+	// }
 
-	order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(s.context, wObject)
-	if err != nil {
-		return fmt.Errorf("rejecting header: %v", err)
-	}
+	// order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(s.context, wObject)
+	// if err != nil {
+	// 	return fmt.Errorf("rejecting header: %v", err)
+	// }
 
-	log.Global.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
+	// log.Global.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
 
-	// Send mined header to the relevant go-quai nodes.
-	// Should be synchronous starting with the lowest levels.
-	for i := common.HierarchyDepth - 1; i >= order; i-- {
-		err := s.clients[i].ReceiveMinedHeader(s.context, wObject)
-		if err != nil {
-			// Header was rejected. Refresh workers to try again.
-			cs.pushNewJob(s.currentBlockTemplate())
-			return fmt.Errorf("rejected header: %v", err)
-		}
-	}
+	// // Send mined header to the relevant go-quai nodes.
+	// // Should be synchronous starting with the lowest levels.
+	// for i := common.HierarchyDepth - 1; i >= order; i-- {
+	// 	err := s.clients[i].ReceiveMinedHeader(s.context, wObject)
+	// 	if err != nil {
+	// 		// Header was rejected. Refresh workers to try again.
+	// 		cs.pushNewJob(s.currentBlockTemplate())
+	// 		return fmt.Errorf("rejected header: %v", err)
+	// 	}
+	// }
 
-	return nil
+	return s.clients[common.ZONE_CTX].ReceiveMinedHeader(s.context, wObject)
 }
