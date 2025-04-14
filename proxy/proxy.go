@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,7 +22,6 @@ import (
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
-	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 	"google.golang.org/protobuf/proto"
 
@@ -125,8 +123,6 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	log.Global.Printf("Set block refresh every %v", refreshIntv)
 
 	proxy.threshold = proxy.clients[common.ZONE_CTX].GetWorkShareP2PThreshold(proxy.context)
-	proxy.threshold = uint64(params.WorkSharesThresholdDiff)
-	proxy.threshold = 1
 
 	if !cfg.Proxy.SealMining {
 		// The node will only provide the workobject if SealMining is not enabled.
@@ -360,6 +356,13 @@ func (s *ProxyServer) updateCustomSealTemplate(workShareUpdate *quai.WorkShareUp
 		log.Global.WithField("err", err).Error("Error with the provided workshare difficulty or threshold")
 	}
 
+	// t := s.currentBlockTemplate()
+
+	// if t != nil && t.CustomSeal == workShareUpdate.SealHash {
+	// 	return
+	// }
+	// threshold := consensus.DifficultyToTarget(workShareUpdate.Difficulty)
+
 	newTemplate := &BlockTemplate{
 		CustomSeal:          workShareUpdate.SealHash,
 		Target:              threshold,
@@ -426,38 +429,39 @@ func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.WorkOb
 		log.Global.Printf("Stale header received, block number: %d", wObject.NumberU64(common.ZONE_CTX))
 	}
 
-	err := s.clients[common.ZONE_CTX].ReceiveWorkShare(s.context, wObject.WorkObjectHeader())
-	if err != nil {
-		return nil, err
-	}
+	// err := s.clients[common.ZONE_CTX].ReceiveMinedHeader(s.context, wObject)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	err := s.clients[common.ZONE_CTX].ReceiveNonce(s.context, workEntry.sealHash, types.BlockNonce(nonce))
 
-	return wObject, nil
+	return wObject, err
 }
 
 func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) error {
 
-	powHash, err := s.engine.VerifySeal(wObject.WorkObjectHeader())
-	if err != nil {
-		return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
-	}
+	// powHash, err := s.engine.VerifySeal(wObject.WorkObjectHeader())
+	// if err != nil {
+	// 	return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
+	// }
 
-	order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(s.context, wObject)
-	if err != nil {
-		return fmt.Errorf("rejecting header: %v", err)
-	}
+	// order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(s.context, wObject)
+	// if err != nil {
+	// 	return fmt.Errorf("rejecting header: %v", err)
+	// }
 
-	log.Global.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
+	// log.Global.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
 
-	// Send mined header to the relevant go-quai nodes.
-	// Should be synchronous starting with the lowest levels.
-	for i := common.HierarchyDepth - 1; i >= order; i-- {
-		err := s.clients[i].ReceiveMinedHeader(s.context, wObject)
-		if err != nil {
-			// Header was rejected. Refresh workers to try again.
-			cs.pushNewJob(s.currentBlockTemplate())
-			return fmt.Errorf("rejected header: %v", err)
-		}
-	}
+	// // Send mined header to the relevant go-quai nodes.
+	// // Should be synchronous starting with the lowest levels.
+	// for i := common.HierarchyDepth - 1; i >= order; i-- {
+	// 	err := s.clients[i].ReceiveMinedHeader(s.context, wObject)
+	// 	if err != nil {
+	// 		// Header was rejected. Refresh workers to try again.
+	// 		cs.pushNewJob(s.currentBlockTemplate())
+	// 		return fmt.Errorf("rejected header: %v", err)
+	// 	}
+	// }
 
-	return nil
+	return s.clients[common.ZONE_CTX].ReceiveMinedHeader(s.context, wObject)
 }
