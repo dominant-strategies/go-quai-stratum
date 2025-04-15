@@ -181,50 +181,16 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 func (s *ProxyServer) connectToSlice() SliceClients {
 	var err error
 	clients := SliceClients{}
-	primeConnected := false
-	regionConnected := false
 	zoneConnected := false
-	primeErrorPrinted := false
-	regionErrorPrinted := false
 	zoneErrorPrinted := false
 
-	primeUrl := (*s.upstreams)[common.PRIME_CTX].Url
-	regionUrl := (*s.upstreams)[common.REGION_CTX].Url
-	if regionUrl == "" {
-		log.Global.Fatal("Please specify region port!")
-	}
 	zoneUrl := (*s.upstreams)[common.ZONE_CTX].Url
 	if zoneUrl == "" {
 		log.Global.Fatal("Please specify zone port!")
 	}
 
-	for !primeConnected || !regionConnected || !zoneConnected {
-		if primeUrl != "" && !primeConnected {
-			clients[common.PRIME_CTX], err = quaiclient.Dial(primeUrl, log.Global)
-			if err != nil {
-				if !primeErrorPrinted {
-					log.Global.Println("Unable to connect to node:", "Prime", primeUrl)
-					primeErrorPrinted = true
-				}
-			} else {
-				primeConnected = true
-				log.Global.Println("Connected to Prime at: ", primeUrl)
-			}
-		}
-
-		if regionUrl != "" && !regionConnected {
-			clients[common.REGION_CTX], err = quaiclient.Dial(regionUrl, log.Global)
-			if err != nil {
-				if !regionErrorPrinted {
-					log.Global.Println("Unable to connect to node:", "Region", regionUrl)
-					regionErrorPrinted = true
-				}
-			} else {
-				regionConnected = true
-				log.Global.Println("Connected to Region at: ", regionUrl)
-			}
-		}
-
+	// Zone must always be connected
+	for !zoneConnected {
 		if zoneUrl != "" && !zoneConnected {
 			clients[common.ZONE_CTX], err = quaiclient.Dial(zoneUrl, log.Global)
 			if err != nil {
