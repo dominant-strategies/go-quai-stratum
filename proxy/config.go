@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Name                  string        `json:"name"`
 	Proxy                 Proxy         `json:"proxy"`
+	Mining                Mining        `json:"mining"`
 	Api                   api.ApiConfig `json:"api"`
 	Upstream              []Upstream    `json:"upstream"`
 	UpstreamCheckInterval string        `json:"upstreamCheckInterval"`
@@ -48,6 +49,11 @@ type Proxy struct {
 	Stratum Stratum `json:"stratum"`
 
 	StratumNiceHash StratumNiceHash `json:"stratum_nice_hash"`
+}
+
+type Mining struct {
+	GpuType string `json:"gpuType"`
+	Enabled bool   `json:"enabled"`
 }
 
 type Stratum struct {
