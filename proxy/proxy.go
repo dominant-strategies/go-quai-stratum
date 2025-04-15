@@ -294,13 +294,15 @@ func (s *ProxyServer) updateBlockTemplate(pendingWo *types.WorkObject) {
 		return
 	}
 
-	var threshold *big.Int
-	var err error
-	threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), int(s.threshold))
-	if err != nil {
-		log.Global.WithField("err", err).Error("Error calculating the target")
-		return
-	}
+	// var threshold *big.Int
+	// var err error
+	// threshold, err = consensus.CalcWorkShareThreshold(pendingWo.WorkObjectHeader(), int(s.threshold))
+	// if err != nil {
+	// 	log.Global.WithField("err", err).Error("Error calculating the target")
+	// 	return
+	// }
+
+	threshold := consensus.DifficultyToTarget(pendingWo.Difficulty())
 	newTemplate := BlockTemplate{
 		WorkObject: pendingWo,
 		Target:     threshold,
