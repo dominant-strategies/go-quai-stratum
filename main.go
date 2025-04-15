@@ -75,6 +75,7 @@ func readConfig(cfg *proxy.Config) {
 	}
 
 	if gpuType != nil && *gpuType != "" {
+		cfg.Mining.Enabled = true
 		cfg.Mining.GpuType = *gpuType
 	}
 
