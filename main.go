@@ -20,7 +20,6 @@ import (
 	"github.com/dominant-strategies/go-quai-stratum/util"
 
 	"github.com/dominant-strategies/go-quai/cmd/utils"
-	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/log"
 )
 
@@ -79,8 +78,10 @@ func readConfig(cfg *proxy.Config) {
 
 	// Perform custom overrides. Default means they weren't set on the command line.
 	if zonePort != nil && *zonePort != "" {
-		cfg.Upstream[common.ZONE_CTX].Name = *zonePort
-		cfg.Upstream[common.ZONE_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*zonePort)
+		cfg.Upstream.Name = *zonePort
+		if cfg.Upstream.Url == "" {
+			cfg.Upstream.Url = "ws://127.0.0.1:" + returnPortHelper(*zonePort)
+		}
 	}
 	if *stratumPort != -1 {
 		cfg.Proxy.Stratum.Listen = "0.0.0.0:" + strconv.Itoa(*stratumPort)

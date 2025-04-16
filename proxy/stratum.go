@@ -268,7 +268,7 @@ func (cs *Session) handleTCPMessage(s *ProxyServer, req *Request) error {
 				log.Global.WithField("workShareHash", header.Hash()).Info("Miner submitted a workShare")
 			} else {
 				log.Global.WithFields(log.Fields{
-					"location":  s.config.Upstream[common.ZONE_CTX].Name,
+					"location":  s.config.Upstream.Name,
 					"number":    header.NumberArray(),
 					"blockhash": header.Hash(),
 				}).Info("Miner submitted a block")

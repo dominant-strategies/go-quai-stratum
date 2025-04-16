@@ -37,7 +37,7 @@ type ProxyServer struct {
 	context            context.Context
 	config             *Config
 	blockTemplate      atomic.Value
-	upstreams          *[]Upstream
+	upstream           *Upstream
 	clients            SliceClients
 	backend            *storage.RedisClient
 	diff               string
@@ -88,11 +88,11 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	policy := policy.Start(&cfg.Proxy.Policy, backend)
 
 	proxy := &ProxyServer{
-		context:   context.Background(),
-		config:    cfg,
-		upstreams: &cfg.Upstream,
-		backend:   backend,
-		policy:    policy,
+		context:  context.Background(),
+		config:   cfg,
+		upstream: &cfg.Upstream,
+		backend:  backend,
+		policy:   policy,
 		engine: progpow.New(
 			progpow.Config{
 				NotifyFull:   true,
@@ -151,10 +151,10 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 						continue
 					}
 					pendingHeader := &types.WorkObject{}
-					location, err := util.LocationFromName((*proxy.upstreams)[common.ZONE_CTX].Name)
+					location, err := util.LocationFromName(proxy.upstream.Name)
 					if err != nil {
 						log.Global.WithFields(log.Fields{
-							"locationName": (*proxy.upstreams)[common.ZONE_CTX].Name,
+							"locationName": proxy.upstream.Name,
 							"err":          err,
 						}).Error("Error getting location from name")
 						continue
@@ -184,7 +184,7 @@ func (s *ProxyServer) connectToSlice() SliceClients {
 	zoneConnected := false
 	zoneErrorPrinted := false
 
-	zoneUrl := (*s.upstreams)[common.ZONE_CTX].Url
+	zoneUrl := s.upstream.Url
 	if zoneUrl == "" {
 		log.Global.Fatal("Please specify zone port!")
 	}
@@ -266,7 +266,7 @@ func (s *ProxyServer) markOk() {
 func (s *ProxyServer) fetchBlockTemplate() {
 	pendingHeader, err := s.clients[common.ZONE_CTX].GetPendingHeader(s.context)
 	if err != nil {
-		log.Global.Printf("Error while getting pending header (work) on %s: %s", (*s.upstreams)[common.ZONE_CTX].Name, err)
+		log.Global.Printf("Error while getting pending header (work) on %s: %s", s.upstream.Name, err)
 		return
 	}
 	s.updateBlockTemplate(pendingHeader)
@@ -345,13 +345,13 @@ func (s *ProxyServer) finalizeTemplate(newTemplate *BlockTemplate) {
 
 	if !s.config.Proxy.SealMining {
 		log.Global.WithFields(log.Fields{
-			"location": s.config.Upstream[common.ZONE_CTX].Name,
+			"location": s.config.Upstream.Name,
 			"number":   newTemplate.WorkObject.NumberArray(),
 			"sealHash": newTemplate.WorkObject.SealHash(),
 		}).Printf("New block to mine")
 	} else {
 		log.Global.WithFields(log.Fields{
-			"location": s.config.Upstream[common.ZONE_CTX].Name,
+			"location": s.config.Upstream.Name,
 			"sealHash": newTemplate.CustomSeal,
 		}).Printf("New block to mine")
 	}

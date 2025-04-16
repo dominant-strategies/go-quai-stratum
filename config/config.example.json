@@ -83,8 +83,8 @@
 	"upstream": [
 		{
 			"context": "zone",
-			"name": "",
-			"url": "",
+			"name": "cyprus1",
+			"url": "ws://localhost:8200",
 			"timeout": "10s"
 		}
 	]
