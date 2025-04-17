@@ -21,7 +21,6 @@ import (
 	"github.com/dominant-strategies/go-quai-stratum/util"
 
 	"github.com/dominant-strategies/go-quai/cmd/utils"
-	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/log"
 )
 
@@ -50,8 +49,6 @@ func startApi() {
 
 func readConfig(cfg *proxy.Config) {
 	configPath := flag.String("config", "config/config.json", "Path to config file")
-	primePort := flag.String("prime", "", "Prime upstream port (overrides config)")
-	regionPort := flag.String("region", "", "Region upstream port (overrides config)")
 	zonePort := flag.String("zone", "", "Zone upstream port (overrides config)")
 
 	stratumPort := flag.Int("stratum", -1, "Stratum listen port (overrides config)")
@@ -76,21 +73,16 @@ func readConfig(cfg *proxy.Config) {
 	}
 
 	if gpuType != nil && *gpuType != "" {
+		cfg.Mining.Enabled = true
 		cfg.Mining.GpuType = *gpuType
 	}
 
 	// Perform custom overrides. Default means they weren't set on the command line.
-	if primePort != nil && *primePort != "" {
-		cfg.Upstream[common.PRIME_CTX].Name = *primePort
-		cfg.Upstream[common.PRIME_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*primePort)
-	}
-	if regionPort != nil && *regionPort != "" {
-		cfg.Upstream[common.REGION_CTX].Name = *regionPort
-		cfg.Upstream[common.REGION_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*regionPort)
-	}
 	if zonePort != nil && *zonePort != "" {
-		cfg.Upstream[common.ZONE_CTX].Name = *zonePort
-		cfg.Upstream[common.ZONE_CTX].Url = "ws://127.0.0.1:" + returnPortHelper(*zonePort)
+		cfg.Upstream.Name = *zonePort
+		if cfg.Upstream.Url == "" {
+			cfg.Upstream.Url = "ws://127.0.0.1:" + returnPortHelper(*zonePort)
+		}
 	}
 	if *stratumPort != -1 {
 		cfg.Proxy.Stratum.Listen = "0.0.0.0:" + strconv.Itoa(*stratumPort)

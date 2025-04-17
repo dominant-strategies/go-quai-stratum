@@ -83,17 +83,6 @@
 	"upstreamCheckInterval": "5s",
 	"upstream": [
 		{
-			"context": "prime",
-			"url": "ws://127.0.0.1:8001",
-			"timeout": "10s"
-		},
-		{
-			"context": "region",
-			"name": "",
-			"url": "",
-			"timeout": "10s"
-		},
-		{
 			"context": "zone",
 			"name": "",
 			"url": "",
