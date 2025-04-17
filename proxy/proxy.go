@@ -68,9 +68,10 @@ type jobDetails struct {
 }
 
 type Session struct {
-	ip   string
-	port string
-	enc  *json.Encoder
+	ip         string
+	port       string
+	enc        *json.Encoder
+sealMining bool // true if the client is mining via only sealHashes (decentralized pool)
 
 	// Stratum
 	sync.Mutex
@@ -266,10 +267,6 @@ func (s *ProxyServer) isSick() bool {
 		return true
 	}
 	return false
-}
-
-func (s *ProxyServer) markOk() {
-	atomic.StoreInt64(&s.failsCount, 0)
 }
 
 func (s *ProxyServer) fetchBlockTemplate() {
