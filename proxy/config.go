@@ -13,7 +13,7 @@ type Config struct {
 	Proxy                 Proxy         `json:"proxy"`
 	Mining                Mining        `json:"mining"`
 	Api                   api.ApiConfig `json:"api"`
-	Upstream              []Upstream    `json:"upstream"`
+	Upstream              Upstream      `json:"upstream"`
 	UpstreamCheckInterval string        `json:"upstreamCheckInterval"`
 
 	Threads int `json:"threads"`
