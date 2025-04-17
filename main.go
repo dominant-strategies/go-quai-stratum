@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/J-A-M-P-S/structs"
 
@@ -117,6 +118,8 @@ var gpuMiners embed.FS
 
 func startGpuMiner(config proxy.Config) {
 
+	// Delay for the proxy to fully initialize.
+	time.Sleep(5 * time.Second)
 	// Define the binary name based on GPU type
 	binaryName := "quai-gpu-miner-" + config.Mining.GpuType
 	embeddedPath := "gpu-miner/" + binaryName
