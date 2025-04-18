@@ -20,7 +20,7 @@ clean:
 	rm -fr build/_workspace/pkg/ $(GOBIN)/*
 
 debug:
-	$(GOBUILD) -gcflags="all=-N -l" -o ./build/bin/go-quai-stratum ./main.go
+	$(GOBUILD) -gcflags="all=-N -l" -v -o ./build/bin/go-quai-stratum ./main.go
 
 go-quai-stratum:
 	$(GOBUILD) -v -o ./build/bin/go-quai-stratum ./main.go

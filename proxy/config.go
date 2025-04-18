@@ -4,14 +4,16 @@ import (
 	"github.com/dominant-strategies/go-quai-stratum/api"
 	"github.com/dominant-strategies/go-quai-stratum/policy"
 	"github.com/dominant-strategies/go-quai-stratum/storage"
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
 )
 
 type Config struct {
 	Name                  string        `json:"name"`
 	Proxy                 Proxy         `json:"proxy"`
+	Mining                Mining        `json:"mining"`
 	Api                   api.ApiConfig `json:"api"`
-	Upstream              []Upstream    `json:"upstream"`
+	Upstream              Upstream      `json:"upstream"`
 	UpstreamCheckInterval string        `json:"upstreamCheckInterval"`
 
 	Threads int `json:"threads"`
@@ -40,6 +42,12 @@ type Proxy struct {
 	StateUpdateInterval  string       `json:"stateUpdateInterval"`
 	HashrateExpiration   string       `json:"hashrateExpiration"`
 
+	SealMining      bool           `json:"sealMining"`
+	QuaiCoinbase    common.Address `json:"quaiCoinbase"`
+	QiCoinbase      common.Address `json:"qiCoinbase"`
+	Lockup          uint8          `json:"lockup"`
+	MinerPreference float64        `json:"minerPreference"`
+
 	Policy policy.Config `json:"policy"`
 
 	MaxFails    int64 `json:"maxFails"`
@@ -48,6 +56,11 @@ type Proxy struct {
 	Stratum Stratum `json:"stratum"`
 
 	StratumNiceHash StratumNiceHash `json:"stratum_nice_hash"`
+}
+
+type Mining struct {
+	GpuType string `json:"gpuType"`
+	Enabled bool   `json:"enabled"`
 }
 
 type Stratum struct {

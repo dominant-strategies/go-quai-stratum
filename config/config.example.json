@@ -7,8 +7,19 @@
 	"avgBlockTime": 14.4,
 	"blockTimeWindow": 300,
 
+	"mining": {
+		"gpuType": "nvidia",
+		"enabled": false
+	},
+
 	"proxy": {
 		"enabled": true,
+        "sealMining": true,
+        "sealProvider": "ws://127.0.0.1:8200",
+        "quaiCoinbase" : "0x0000000000000000000000000000000000000001",
+        "qiCoinbase" : "0x0080000000000000000000000000000000000001",
+        "minerPreference" : 0.5,
+        "lockupByte" : 0,
 		"listen": "0.0.0.0:0",
 		"limitHeadersSize": 1024,
 		"limitBodySize": 256,
@@ -21,6 +32,7 @@
 
 		"healthCheck": true,
 		"maxFails": 100,
+
 
 		"stratum": {
 			"enabled": true,
@@ -70,17 +82,6 @@
 
 	"upstreamCheckInterval": "5s",
 	"upstream": [
-		{
-			"context": "prime",
-			"url": "ws://127.0.0.1:8001",
-			"timeout": "10s"
-		},
-		{
-			"context": "region",
-			"name": "",
-			"url": "",
-			"timeout": "10s"
-		},
 		{
 			"context": "zone",
 			"name": "",
