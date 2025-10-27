@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/quaiclient"
 	"google.golang.org/protobuf/proto"
 
@@ -96,7 +96,7 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 		backend:   backend,
 		policy:    policy,
 		engine: progpow.New(
-			progpow.Config{
+			params.PowConfig{
 				NotifyFull:   true,
 				NodeLocation: common.Location{0, 0}},
 			nil,
@@ -118,7 +118,7 @@ func NewProxy(cfg *Config, backend *storage.RedisClient) *ProxyServer {
 	refreshTimer := time.NewTimer(refreshIntv)
 	log.Global.Printf("Set block refresh every %v", refreshIntv)
 
-	proxy.threshold = proxy.clients[common.ZONE_CTX].GetWorkShareP2PThreshold(proxy.context)
+	proxy.threshold = 2
 	proxy.fetchBlockTemplate()
 
 	if cfg.Proxy.Stratum.Enabled {
@@ -237,7 +237,7 @@ func (s *ProxyServer) Start() {
 		MaxHeaderBytes: s.config.Proxy.LimitHeadersSize,
 	}
 
-	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, s.updateCh); err != nil {
+	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, types.Progpow, s.updateCh); err != nil {
 		log.Global.Fatal("Failed to subscribe to pending header events: ", err)
 	}
 
@@ -273,11 +273,12 @@ func (s *ProxyServer) markOk() {
 }
 
 func (s *ProxyServer) fetchBlockTemplate() {
-	pendingHeader, err := s.clients[common.ZONE_CTX].GetPendingHeader(s.context)
+	pendingHeader, err := s.clients[common.ZONE_CTX].GetPendingHeader(s.context, types.Progpow)
 	if err != nil {
 		log.Global.Printf("Error while getting pending header (work) on %s: %s", (*s.upstreams)[common.ZONE_CTX].Name, err)
 		return
 	}
+	pendingHeader.WorkObjectHeader().SetAuxPow(nil)
 	s.updateBlockTemplate(pendingHeader)
 }
 
@@ -356,27 +357,15 @@ func (s *ProxyServer) verifyMinedHeader(jobID uint, nonce []byte) (*types.WorkOb
 
 func (s *ProxyServer) submitMinedHeader(cs *Session, wObject *types.WorkObject) error {
 
-	powHash, err := s.engine.VerifySeal(wObject.WorkObjectHeader())
+	powHash, err := s.engine.ComputePowHash(wObject.WorkObjectHeader())
 	if err != nil {
 		return fmt.Errorf("unable to verify seal of block: %#x. %v", powHash, err)
 	}
 
-	order, err := (*s.clients[common.ZONE_CTX]).CalcOrder(s.context, wObject)
+	// Send all blocks to the zone
+	err = s.clients[common.ZONE_CTX].ReceiveMinedHeader(s.context, wObject)
 	if err != nil {
-		return fmt.Errorf("rejecting header: %v", err)
-	}
-
-	log.Global.Printf("Received a %s block", strings.ToLower(common.OrderToString(order)))
-
-	// Send mined header to the relevant go-quai nodes.
-	// Should be synchronous starting with the lowest levels.
-	for i := common.HierarchyDepth - 1; i >= order; i-- {
-		err := s.clients[i].ReceiveMinedHeader(s.context, wObject)
-		if err != nil {
-			// Header was rejected. Refresh workers to try again.
-			cs.pushNewJob(s.currentBlockTemplate())
-			return fmt.Errorf("rejected header: %v", err)
-		}
+		return fmt.Errorf("unable to send mined header to zone: %v", err)
 	}
 
 	return nil
