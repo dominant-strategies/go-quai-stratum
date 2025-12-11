@@ -237,7 +237,7 @@ func (s *ProxyServer) Start() {
 		MaxHeaderBytes: s.config.Proxy.LimitHeadersSize,
 	}
 
-	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, types.Progpow, s.updateCh); err != nil {
+	if _, err := s.clients[common.ZONE_CTX].SubscribePendingHeader(s.context, s.updateCh); err != nil {
 		log.Global.Fatal("Failed to subscribe to pending header events: ", err)
 	}
 
@@ -273,7 +273,7 @@ func (s *ProxyServer) markOk() {
 }
 
 func (s *ProxyServer) fetchBlockTemplate() {
-	pendingHeader, err := s.clients[common.ZONE_CTX].GetPendingHeader(s.context, types.Progpow)
+	pendingHeader, err := s.clients[common.ZONE_CTX].GetPendingHeader(s.context)
 	if err != nil {
 		log.Global.Printf("Error while getting pending header (work) on %s: %s", (*s.upstreams)[common.ZONE_CTX].Name, err)
 		return
